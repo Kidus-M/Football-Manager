@@ -51,7 +51,7 @@ def percentiles(
     for _group, players in comp.groupby("group"):
         qualified = players[players.qualified]
         ident = ["player_id", "name", "position", "group", "detailed_position",
-                 "competition_id", "minutes", "qualified"]  # fmt: skip
+                 "competition_id", "minutes", "qualified", "defence_season"]  # fmt: skip
         out = players[[c for c in ident if c in players]].copy()
         out["peers"] = len(qualified)
         for m in metrics:

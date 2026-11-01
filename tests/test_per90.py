@@ -68,6 +68,35 @@ def test_tackles_prefer_apifootball_and_fall_back_to_fpl():
     assert t["tm-2"] == pytest.approx(2.0)  # FPL fills the gap
 
 
+def test_older_apifootball_season_fills_only_gaps_and_is_labelled():
+    con = connect(":memory:")
+    upsert(con, "players", pd.DataFrame([
+        {"player_id": "tm-1", "name": "PL", "position": "DEF", "detailed_position": "Centre-Back"},
+        {"player_id": "tm-2", "name": "L", "position": "DEF", "detailed_position": "Centre-Back"},
+    ]))  # fmt: skip
+    upsert(con, "player_source_ids", pd.DataFrame([
+        {"player_id": "tm-1", "source": "fpl", "source_player_id": "1"},
+        {"player_id": "tm-1", "source": "apifootball", "source_player_id": "8"},
+        {"player_id": "tm-2", "source": "understat", "source_player_id": "2"},
+        {"player_id": "tm-2", "source": "apifootball", "source_player_id": "9"},
+    ]))  # fmt: skip
+    old = {"season": 2024}
+    upsert(con, "player_season_stats", pd.DataFrame([
+        _row("fpl", "1", "tackles", 20, 900),                      # current FPL tackles
+        {**_row("apifootball", "8", "tackles", 90, 2700), **old},  # must not override them
+        {**_row("apifootball", "8", "interceptions", 30, 2700), **old},
+        _row("understat", "2", "xa", 1.0, 900),
+        {**_row("apifootball", "9", "tackles", 60, 1800), **old},
+        {**_row("apifootball", "9", "interceptions", 5, 300), **old},  # too few minutes
+    ]))  # fmt: skip
+    t = per90_table(con, [2025, 2026]).set_index("player_id")
+    assert t.loc["tm-1", "tackles"] == pytest.approx(2.0)  # window data wins
+    assert t.loc["tm-1", "interceptions"] == pytest.approx(1.0)  # gap filled from 2024
+    assert t.loc["tm-1", "defence_season"] == 2024
+    assert t.loc["tm-2", "tackles"] == pytest.approx(3.0)
+    assert pd.isna(t.loc["tm-2", "interceptions"])  # 300 minutes: not trusted
+
+
 def test_multiple_seasons_pool_totals_and_minutes():
     con = connect(":memory:")
     upsert(con, "players", pd.DataFrame([
