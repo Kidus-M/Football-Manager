@@ -48,7 +48,7 @@ def render(
         f'<text x="24" y="38" fill="{TEXT}" font-size="22" font-weight="700">'
         f"{escape(title)}</text>",
         f'<text x="24" y="60" fill="{MUTED}" font-size="13">{escape(subtitle)}</text>',
-        f'<g transform="translate(0,40)">',
+        '<g transform="translate(0,40)">',
     ]
 
     for ring in RINGS:
@@ -80,9 +80,7 @@ def render(
             f'<polygon points="{_polygon(pts)}" fill="{colour}" fill-opacity="0.22" '
             f'stroke="{colour}" stroke-width="2.5" stroke-linejoin="round"/>'
         )
-        parts.extend(
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3.5" fill="{colour}"/>' for x, y in pts
-        )
+        parts.extend(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3.5" fill="{colour}"/>' for x, y in pts)
     parts.append("</g>")
 
     for i, ((name, _), colour) in enumerate(zip(players, colours, strict=False)):

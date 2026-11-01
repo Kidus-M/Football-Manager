@@ -1,14 +1,17 @@
-"""Command-line entry point: `recruit ingest`, `recruit match` and `recruit squad`."""
+"""Command-line entry point: `recruit ingest | match | squad | profile`."""
 
 import argparse
 import sys
 from collections.abc import Callable
+from pathlib import Path
 
 import pandas as pd
 
-from recruit_intel import db
+from recruit_intel import DATA_DIR, db
+from recruit_intel.analysis import profile, radar
 from recruit_intel.analysis.squad import current_squad
-from recruit_intel.config import load_club
+from recruit_intel.config import load_club, load_roles
+from recruit_intel.features.positions import GROUPS
 from recruit_intel.identity import run as identity_run
 from recruit_intel.ingest import clubelo, fpl, transfermarkt, understat
 from recruit_intel.ingest.http import DAY, CachedClient
@@ -121,6 +124,92 @@ def cmd_squad(args: argparse.Namespace) -> int:
     return 0
 
 
+def _season_label(season: int) -> str:
+    return f"{season}-{(season + 1) % 100:02d}"
+
+
+def _latest_season(con) -> int:
+    return con.execute(
+        "SELECT max(season) FROM player_season_stats WHERE source = 'fpl'"
+    ).fetchone()[0]
+
+
+def _print_squad_profile(con, club, season) -> None:
+    table = profile.squad_profile(con, club, season)
+    table["minutes"] = [
+        f"{m}" if q else f"{m}*" for m, q in zip(table.minutes, table.qualified, strict=True)
+    ]
+    for col in ("strengths", "weaknesses"):
+        table[col] = table[col].map(lambda xs: ", ".join(xs) or "-")
+    print(
+        f"{club.club} squad profile, {_season_label(season)}: percentiles vs "
+        f"{club.peer_group} players in the same position group\n"
+        f"* under {table.attrs['min_minutes']} minutes: ranked, but a small sample\n"
+    )
+    cols = ["name", "group", "minutes", "best_role", "role_fit", "strengths", "weaknesses"]
+    with pd.option_context("display.width", 250, "display.max_colwidth", 60):
+        print(table[cols].to_string(index=False, na_rep="-"))
+
+
+def _print_player(row: pd.Series, min_minutes: int) -> None:
+    group = GROUPS[row["group"]]
+    sample = "" if row.qualified else f"  (under {min_minutes} min: small sample)"
+    print(f"\n{row['name']}  ·  {row.detailed_position or row['group']}  ·  "
+          f"{int(row.minutes)} min{sample}")  # fmt: skip
+    print(f"vs {int(row.peers)} {group['label'].lower()}")
+    for m in group["metrics"]:
+        pct = row.get(m)
+        bar = "-" if pd.isna(pct) else "█" * round(pct / 5)
+        value = "n/a" if pd.isna(pct) else f"{pct:3.0f}"
+        print(f"  {profile.label(m):<36} {value}  {bar}")
+    strengths, weaknesses = profile.strengths_weaknesses(row)
+    print("  strengths: " + (", ".join(profile.label(m) for m in strengths) or "-"))
+    print("  weaknesses: " + (", ".join(profile.label(m) for m in weaknesses) or "-"))
+    roles = load_roles()
+    fits = profile.role_fits(row, roles)[:3]
+    print("  roles: " + (", ".join(f"{roles[f.role].label} {f.score:.0f}" for f in fits) or "-"))
+
+
+def cmd_profile(args: argparse.Namespace) -> int:
+    club = load_club(args.club)
+    con = db.connect(args.db)
+    season = args.season or _latest_season(con)
+    if not args.players:
+        _print_squad_profile(con, club, season)
+        return 0
+
+    pct = profile.peer_percentiles(con, club, season)
+    rows = []
+    for query in args.players:
+        hits = profile.find_players(pct, query)
+        if len(hits) != 1:
+            names = ", ".join(hits["name"].head(8)) if len(hits) else "none"
+            print(f"'{query}' matched {len(hits)} {club.peer_group} players: {names}")
+            return 1
+        rows.append(hits.iloc[0])
+    for row in rows:
+        _print_player(row, pct.attrs["min_minutes"])
+
+    if args.radar:
+        group = rows[0]["group"]
+        metrics = GROUPS[group]["metrics"]
+        players = [
+            (r["name"], {m: (None if pd.isna(r.get(m)) else r[m]) for m in metrics}) for r in rows
+        ]
+        title = " vs ".join(r["name"] for r in rows)
+        peers = GROUPS[group]["label"].lower()
+        subtitle = (
+            f"{club.peer_group} {_season_label(season)} · percentile vs {peers} "
+            f"(min {pct.attrs['min_minutes']} min)"
+        )
+        accent = club.theme.accent if club.theme else "#DA291C"
+        path = Path(args.radar)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(radar.render(players, metrics, title, subtitle, accent), encoding="utf-8")
+        print(f"\nradar written to {path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -146,6 +235,19 @@ def main(argv: list[str] | None = None) -> int:
     p_squad = sub.add_parser("squad", help="print the current squad with per-90 stats")
     p_squad.add_argument("--season", type=int)
     p_squad.set_defaults(func=cmd_squad)
+
+    p_profile = sub.add_parser(
+        "profile", help="squad strengths/weaknesses, or percentiles for named players"
+    )
+    p_profile.add_argument("players", nargs="*", help="player name(s); omit for the squad")
+    p_profile.add_argument("--season", type=int)
+    p_profile.add_argument(
+        "--radar",
+        nargs="?",
+        const=str(DATA_DIR / "radars" / "radar.svg"),
+        help="write an SVG radar (overlaying up to 3 players)",
+    )
+    p_profile.set_defaults(func=cmd_profile)
 
     args = parser.parse_args(argv)
     return args.func(args)
