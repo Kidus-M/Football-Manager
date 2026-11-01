@@ -46,8 +46,16 @@ def test_parse_sums_entries_and_skips_players_without_minutes():
     assert str(players.iloc[0].birth_date) == "2005-11-13"
     stats = out["player_season_stats"].set_index("metric")
     assert stats.loc["tackles"].value == 18 and stats.loc["tackles"].minutes == 900
-    assert stats.loc["interceptions"].value == 4  # None counts as 0
+    assert stats.loc["interceptions"].value == 4  # the unrecorded entry adds nothing
     assert stats.loc["dribbled_past"].value == 3
+
+
+def test_field_never_recorded_is_missing_not_zero():
+    page = json.loads(json.dumps(PAGE))
+    for s in page["response"][0]["statistics"]:
+        s["tackles"]["blocks"] = None
+    metrics = set(af.parse([page], "ENG-Premier League", 2026)["player_season_stats"].metric)
+    assert "blocks" not in metrics and "tackles" in metrics
 
 
 def _client(tmp_path, body):
@@ -64,6 +72,30 @@ def test_quota_error_raises_and_is_not_cached(tmp_path):
     with pytest.raises(af.QuotaExhausted):
         af.fetch_page(client, 39, 2026, 1)
     assert not any(tmp_path.rglob("*.cache"))
+
+
+PLAN = {"errors": {"plan": "Free plans do not have access to this season, try from 2022 to 2024."}}
+
+
+def test_plan_restriction_falls_back_to_newest_allowed_season(tmp_path):
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.params["season"])
+        return httpx.Response(200, json=PLAN if request.url.params["season"] == "2026" else PAGE)
+
+    client = CachedClient("af", cache_dir=tmp_path, min_interval=0)
+    client._client = httpx.Client(transport=httpx.MockTransport(handler))
+    assert af.usable_season(client, 2026) == 2024
+    assert af.usable_season(client, 2026) == 2024  # remembered: no second probe
+    assert seen == ["2026"]
+    assert not list(tmp_path.rglob("*.cache"))  # the refusal itself isn't cached
+
+
+def test_plan_error_is_its_own_exception(tmp_path):
+    with pytest.raises(af.PlanRestricted) as info:
+        af.fetch_page(_client(tmp_path, PLAN), 39, 2026, 1)
+    assert info.value.latest == 2024
 
 
 def test_ok_page_is_cached(tmp_path):

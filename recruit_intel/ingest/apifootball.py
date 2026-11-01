@@ -11,10 +11,17 @@ on disk, so a rerun only spends requests on pages not fetched yet: run
 
 The quota running out comes back as HTTP 200 with an `errors` field; such
 responses are never cached, and the run stops cleanly.
+
+The free plan only covers seasons 2022-2024, so on a free key the newest
+season it allows is loaded instead of the current one (see usable_season),
+and features/per90.py uses it as a labelled, older fallback for defensive
+metrics.
 """
 
 import json
 import os
+import re
+from pathlib import Path
 
 import pandas as pd
 
@@ -57,6 +64,16 @@ class QuotaExhausted(RuntimeError):
     """The daily request limit is used up; rerun tomorrow."""
 
 
+class PlanRestricted(RuntimeError):
+    """The key's plan doesn't cover the requested season. The free plan says
+    e.g. "try from 2022 to 2024"; `latest` is the newest season it allows."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        years = [int(y) for y in re.findall(r"\b(20\d\d)\b", message)]
+        self.latest = max(years) if years else None
+
+
 def api_key() -> str | None:
     """API_FOOTBALL_KEY from the environment, or from the repo's .env file."""
     if key := os.environ.get("API_FOOTBALL_KEY"):
@@ -81,15 +98,45 @@ def fetch_page(client: CachedClient, league_id: int, season: int, page: int) -> 
     if errors:  # never keep an error response in the cache
         client._path(url, params).unlink(missing_ok=True)
         text = json.dumps(errors)
+        if isinstance(errors, dict) and "plan" in errors:
+            raise PlanRestricted(str(errors["plan"]))
         if "limit" in text.lower() or "requests" in text.lower():
             raise QuotaExhausted(text)
         raise RuntimeError(f"API-Football error: {text}")
     return body
 
 
-def _num(value) -> float:
+def _plan_file(client: CachedClient) -> Path:
+    return client.cache_dir / "plan.json"
+
+
+def usable_season(client: CachedClient, wanted: int) -> int:
+    """The newest season at or before `wanted` that the key's plan allows.
+
+    Learned from the API's own refusal ("try from 2022 to 2024") the first
+    time, then remembered in the cache folder so later runs don't spend a
+    request finding out again."""
+    plan = _plan_file(client)
+    if plan.exists():
+        latest = json.loads(plan.read_text()).get("latest_season")
+        if latest is not None and latest < wanted:
+            return latest
+    league_id = LEAGUES["ENG"][0]
+    try:
+        fetch_page(client, league_id, wanted, 1)
+        return wanted
+    except PlanRestricted as exc:
+        if exc.latest is None or exc.latest >= wanted:
+            raise
+        plan.parent.mkdir(parents=True, exist_ok=True)
+        plan.write_text(json.dumps({"latest_season": exc.latest, "message": str(exc)}))
+        return exc.latest
+
+
+def _num(value) -> float | None:
+    """None when API-Football didn't record the field (not the same as 0)."""
     if value is None or value == "":
-        return 0.0
+        return None
     return float(str(value).rstrip("%"))
 
 
@@ -122,7 +169,11 @@ def parse(pages: list[dict], competition: str, season: int) -> dict[str, pd.Data
             )
             team = ",".join(dict.fromkeys(s["team"]["name"] for s in entries))
             for (section, field), metric in METRIC_FIELDS.items():
-                total = sum(_num((s.get(section) or {}).get(field)) for s in entries)
+                values = [_num((s.get(section) or {}).get(field)) for s in entries]
+                recorded = [v for v in values if v is not None]
+                if not recorded:  # not tracked for this player: missing, not zero
+                    continue
+                total = sum(recorded)
                 stats.append(
                     {
                         "source": SOURCE,

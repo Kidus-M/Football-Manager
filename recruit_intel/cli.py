@@ -137,15 +137,26 @@ def _ingest_apifootball(run: _Runner, countries: list[str], season: int) -> None
     if not key:
         print("  ✗ apifootball: no API_FOOTBALL_KEY in the environment or .env")
         return
-    with apifootball.make_client(key) as client:
+    with apifootball.make_client(key) as probe:
+        try:
+            usable = apifootball.usable_season(probe, season)
+        except (apifootball.QuotaExhausted, apifootball.PlanRestricted, RuntimeError) as exc:
+            print(f"  ✗ apifootball: {exc}")
+            return
+    if usable < season:
+        print(f"  ⓘ apifootball: this key's plan stops at {usable}-{(usable + 1) % 100:02d}; "
+              f"loading that as an older fallback for defensive stats")  # fmt: skip
+    # A finished season never changes: cache its pages for a year.
+    ttl = 7 * DAY if usable >= season else 365 * DAY
+    with apifootball.make_client(key, ttl=ttl) as client:
         for country in countries:
             if country not in apifootball.LEAGUES:
                 continue
             # The runner reports any failure (QuotaExhausted included) and
             # returns None; stop there so no more requests are spent.
             fetched = run(
-                f"apifootball {country} {season}",
-                lambda c=country: apifootball.ingest_league(client, c, season),
+                f"apifootball {country} {usable}",
+                lambda c=country: apifootball.ingest_league(client, c, usable),
             )
             if fetched is None:
                 print("  ↻ apifootball stopped; fetched pages are cached, rerun to continue")
