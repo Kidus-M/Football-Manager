@@ -40,7 +40,7 @@ def test_style_model_beats_ablation_when_style_matters():
 
 def test_fit_score_prefers_the_pressing_team():
     pairs = _pairs()
-    model = train(pairs, epochs=80)
+    model = train(pairs)
     player = pairs.iloc[[0, 0]].copy()
     player["dest_ppda"] = [-1.5, 1.5]  # presses hard vs sits off
     hi, lo = model.fit_score(player)
