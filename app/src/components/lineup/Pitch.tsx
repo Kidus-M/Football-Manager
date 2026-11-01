@@ -36,13 +36,22 @@ function Markings() {
   );
 }
 
-/** Where a pitch point lands on screen once the pitch is tilted. */
+/** Tilting brings the near touchline toward the viewer, so it spreads wider
+ * than the container; shrinking the pitch by this factor keeps it inside. */
+function fitFactor(h: number, tiltRad: number) {
+  return PERSPECTIVE / (PERSPECTIVE + (h / 2) * Math.sin(tiltRad));
+}
+
+/** Where a point on the (shrunk, tilted) pitch lands on screen. (u, v) are in
+ * container pixels as if the pitch filled the container. */
 function project(u: number, v: number, w: number, h: number, tiltRad: number) {
-  const dy = v - h / 2;
+  const k = fitFactor(h, tiltRad);
+  const du = (u - w / 2) * k;
+  const dy = (v - h / 2) * k;
   const z = dy * Math.sin(tiltRad); // negative = away from the viewer
   const scale = PERSPECTIVE / (PERSPECTIVE - z);
   return {
-    x: w / 2 + (u - w / 2) * scale,
+    x: w / 2 + du * scale,
     y: h / 2 + dy * Math.cos(tiltRad) * scale,
     scale,
   };
@@ -68,7 +77,7 @@ function Plate({ slot, selected, onSelect }: { slot: Slot; selected: boolean; on
       className="group flex flex-col items-center gap-1 focus-visible:outline-none"
     >
       <span
-        className={`flex size-14 items-center justify-center rounded-full border-2 bg-night/85 font-display text-[26px] leading-none font-black tabular transition-transform group-hover:scale-105 group-focus-visible:ring-2 group-focus-visible:ring-chalk ${
+        className={`flex size-12 items-center justify-center rounded-full border-2 bg-night/85 font-display text-[22px] leading-none font-black tabular transition-transform group-hover:scale-105 group-focus-visible:ring-2 group-focus-visible:ring-chalk ${
           urgent ? "gap-pulse" : ""
         } ${selected ? "ring-2 ring-chalk ring-offset-2 ring-offset-night" : ""}`}
         style={{
@@ -78,10 +87,10 @@ function Plate({ slot, selected, onSelect }: { slot: Slot; selected: boolean; on
       >
         {s ? s.fit : "?"}
       </span>
-      <span className="max-w-28 truncate rounded-sm bg-night/85 px-1.5 py-0.5 text-[12px] leading-tight font-medium">
+      <span className="flex max-w-32 items-baseline gap-1 truncate rounded-sm bg-night/85 px-1.5 py-0.5 text-[12px] leading-tight font-medium">
+        <span className="font-mono text-[9px] text-fog">{slot.key}</span>
         {s ? s.name.split(" ").slice(-1)[0] : slot.role}
       </span>
-      <span className="font-mono text-[9px] text-fog uppercase">{slot.key}</span>
     </button>
   );
 }
@@ -101,6 +110,8 @@ export function Pitch({
   const [size, setSize] = useState({ w: 0, h: 0 });
   const reduce = useReducedMotion();
   const tilt = tilted ? (TILT_DEG * Math.PI) / 180 : 0;
+  const k = size.h ? fitFactor(size.h, tilt) : 1;
+  const inset = `${((1 - k) / 2) * 100}%`;
 
   useEffect(() => {
     const el = ref.current;
@@ -119,9 +130,9 @@ export function Pitch({
       style={{ aspectRatio: `${LENGTH} / ${WIDTH}`, perspective: `${PERSPECTIVE}px` }}
     >
       <motion.div
-        className="absolute inset-0 rounded-sm bg-turf"
+        className="absolute rounded-sm bg-turf"
         initial={false}
-        animate={{ rotateX: tilted ? TILT_DEG : 0 }}
+        animate={{ rotateX: tilted ? TILT_DEG : 0, top: inset, bottom: inset, left: inset, right: inset }}
         transition={{ duration: reduce ? 0 : 0.8, ease: [0.4, 0, 0.2, 1] }}
         style={{
           backgroundImage:
