@@ -1,6 +1,7 @@
 "use client";
 
 import * as d3 from "d3";
+import { useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { league, money } from "@/lib/api";
 
@@ -102,7 +103,7 @@ export function SimilarityMap({
                 key={p.player_id}
                 cx={sx(p.x)}
                 cy={sy(p.y)}
-                r={2.2 / Math.sqrt(k)}
+                r={2.2 / k ** 0.8}
                 fill="var(--fog)"
                 fillOpacity={0.35}
                 onMouseEnter={() => setHover(p)}
@@ -120,7 +121,7 @@ export function SimilarityMap({
                 <circle
                   cx={sx(p.x)}
                   cy={sy(p.y)}
-                  r={(isTarget ? 6 : 4) / Math.sqrt(k)}
+                  r={(isTarget ? 6 : 4) / k ** 0.8}
                   fill={isTarget ? "var(--club)" : "var(--chalk)"}
                   stroke="var(--night)"
                   strokeWidth={1 / k}
@@ -150,7 +151,7 @@ export function SimilarityMap({
         </div>
       )}
       <p className="mt-2 font-mono text-[10px] text-fog uppercase">
-        Scroll to zoom · drag to pan · click a player to centre the search on him
+        Scroll to zoom · drag to pan · click a player to search from him · double-click to zoom in
       </p>
     </div>
   );
