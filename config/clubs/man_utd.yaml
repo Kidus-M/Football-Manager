@@ -1,11 +1,11 @@
 club: Manchester United
 competition: ENG-Premier League
 season: 2026-27
-formation: TBD            # e.g. 3-4-2-1 or 4-2-3-1
-roles:                     # role per formation slot
+formation: 4-2-3-1        # Carrick's shape; any key from config/formations.yaml
+roles:                     # overrides of the formation's default role per slot
   GK: sweeper_keeper
   RCB: ball_playing_cb
-  LWB: attacking_wingback
+  LB: attacking_wingback
   DM: deep_playmaker
   AM: creative_10
   ST: complete_forward

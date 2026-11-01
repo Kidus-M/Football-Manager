@@ -1,0 +1,72 @@
+# Formation library. A club config picks one by key and may override the role
+# of any slot in its own `roles:` map.
+#
+# Each slot lists the position groups that can fill it (GK, CB, FB, DM, CM,
+# AM, W, ST; see recruit_intel/features/positions.py), its default role from
+# config/roles.yaml, and pitch coordinates for the lineup builder (x: 0 left
+# touchline to 100 right; y: 0 own goal line to 100 opponent's).
+
+4-2-3-1:
+  GK:  {groups: [GK],     role: sweeper_keeper,     x: 50, y: 5}
+  RB:  {groups: [FB],     role: attacking_wingback, x: 88, y: 27}
+  RCB: {groups: [CB],     role: ball_playing_cb,    x: 63, y: 20}
+  LCB: {groups: [CB],     role: stopper_cb,         x: 37, y: 20}
+  LB:  {groups: [FB],     role: attacking_wingback, x: 12, y: 27}
+  DM:  {groups: [DM, CM], role: deep_playmaker,     x: 40, y: 42}
+  CM:  {groups: [CM, DM], role: box_to_box,         x: 60, y: 45}
+  RW:  {groups: [W, AM],  role: inside_forward,     x: 85, y: 68}
+  AM:  {groups: [AM, CM], role: creative_10,        x: 50, y: 66}
+  LW:  {groups: [W, AM],  role: inside_forward,     x: 15, y: 68}
+  ST:  {groups: [ST],     role: complete_forward,   x: 50, y: 86}
+
+3-4-2-1:
+  GK:  {groups: [GK],     role: sweeper_keeper,     x: 50, y: 5}
+  RCB: {groups: [CB],     role: ball_playing_cb,    x: 72, y: 21}
+  CB:  {groups: [CB],     role: stopper_cb,         x: 50, y: 18}
+  LCB: {groups: [CB],     role: ball_playing_cb,    x: 28, y: 21}
+  RWB: {groups: [FB, W],  role: attacking_wingback, x: 90, y: 45}
+  DM:  {groups: [DM, CM], role: deep_playmaker,     x: 40, y: 42}
+  CM:  {groups: [CM, DM], role: box_to_box,         x: 60, y: 42}
+  LWB: {groups: [FB, W],  role: attacking_wingback, x: 10, y: 45}
+  RAM: {groups: [AM, W],  role: inside_forward,     x: 65, y: 68}
+  LAM: {groups: [AM, W],  role: creative_10,        x: 35, y: 68}
+  ST:  {groups: [ST],     role: complete_forward,   x: 50, y: 86}
+
+4-3-3:
+  GK:  {groups: [GK],     role: sweeper_keeper,     x: 50, y: 5}
+  RB:  {groups: [FB],     role: attacking_wingback, x: 88, y: 27}
+  RCB: {groups: [CB],     role: ball_playing_cb,    x: 63, y: 20}
+  LCB: {groups: [CB],     role: stopper_cb,         x: 37, y: 20}
+  LB:  {groups: [FB],     role: attacking_wingback, x: 12, y: 27}
+  DM:  {groups: [DM, CM], role: deep_playmaker,     x: 50, y: 40}
+  RCM: {groups: [CM, AM], role: box_to_box,         x: 68, y: 52}
+  LCM: {groups: [CM, AM], role: creative_10,        x: 32, y: 52}
+  RW:  {groups: [W],      role: inside_forward,     x: 86, y: 74}
+  LW:  {groups: [W],      role: inside_forward,     x: 14, y: 74}
+  ST:  {groups: [ST],     role: complete_forward,   x: 50, y: 86}
+
+4-4-2:
+  GK:  {groups: [GK],     role: shot_stopper,       x: 50, y: 5}
+  RB:  {groups: [FB],     role: defensive_fullback, x: 88, y: 25}
+  RCB: {groups: [CB],     role: stopper_cb,         x: 63, y: 20}
+  LCB: {groups: [CB],     role: ball_playing_cb,    x: 37, y: 20}
+  LB:  {groups: [FB],     role: defensive_fullback, x: 12, y: 25}
+  RM:  {groups: [W, CM],  role: wide_playmaker,     x: 88, y: 55}
+  RCM: {groups: [CM, DM], role: box_to_box,         x: 60, y: 48}
+  LCM: {groups: [CM, DM], role: deep_playmaker,     x: 40, y: 48}
+  LM:  {groups: [W, CM],  role: wide_playmaker,     x: 12, y: 55}
+  RST: {groups: [ST],     role: complete_forward,   x: 60, y: 84}
+  LST: {groups: [ST],     role: poacher,            x: 40, y: 84}
+
+3-5-2:
+  GK:  {groups: [GK],     role: sweeper_keeper,     x: 50, y: 5}
+  RCB: {groups: [CB],     role: ball_playing_cb,    x: 72, y: 21}
+  CB:  {groups: [CB],     role: stopper_cb,         x: 50, y: 18}
+  LCB: {groups: [CB],     role: ball_playing_cb,    x: 28, y: 21}
+  RWB: {groups: [FB, W],  role: attacking_wingback, x: 90, y: 48}
+  DM:  {groups: [DM, CM], role: deep_playmaker,     x: 50, y: 40}
+  RCM: {groups: [CM, AM], role: box_to_box,         x: 66, y: 54}
+  LCM: {groups: [CM, AM], role: creative_10,        x: 34, y: 54}
+  LWB: {groups: [FB, W],  role: attacking_wingback, x: 10, y: 48}
+  RST: {groups: [ST],     role: complete_forward,   x: 60, y: 84}
+  LST: {groups: [ST],     role: poacher,            x: 40, y: 84}

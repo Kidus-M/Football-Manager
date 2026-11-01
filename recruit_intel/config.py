@@ -90,6 +90,52 @@ def load_roles(path: Path = CONFIG_DIR / "roles.yaml") -> dict[str, Role]:
     return {key: Role(key=key, **body) for key, body in raw.items()}
 
 
+class Slot(BaseModel):
+    """One position in a formation, with the role it asks for."""
+
+    key: str
+    groups: list[str]
+    role: str
+    x: float
+    y: float
+
+
+@cache
+def load_formations(path: Path = CONFIG_DIR / "formations.yaml") -> dict[str, list[Slot]]:
+    raw = _read_yaml(path)
+    roles = load_roles()
+    formations = {}
+    for name, slots in raw.items():
+        parsed = [Slot(key=key, **body) for key, body in slots.items()]
+        if len(parsed) != 11:
+            raise ValueError(f"formation {name} has {len(parsed)} slots, not 11")
+        for slot in parsed:
+            if slot.role not in roles:
+                raise ValueError(f"formation {name}.{slot.key}: unknown role {slot.role}")
+            if set(slot.groups) - set(GROUPS):
+                raise ValueError(f"formation {name}.{slot.key}: unknown groups {slot.groups}")
+        formations[name] = parsed
+    return formations
+
+
+def lineup(club: "ClubConfig", formation: str | None = None) -> list[Slot]:
+    """The formation's slots with the club's role overrides applied.
+
+    `formation` overrides the club's own (to explore alternatives); overrides
+    for slots the formation lacks are then ignored rather than an error.
+    """
+    name = formation or club.formation
+    if name is None:
+        raise ValueError(f"{club.club} has no formation set; pass one explicitly")
+    formations = load_formations()
+    if name not in formations:
+        raise ValueError(f"unknown formation {name!r}; available: {sorted(formations)}")
+    return [
+        slot.model_copy(update={"role": club.roles.get(slot.key, slot.role)})
+        for slot in formations[name]
+    ]
+
+
 def load_club(name: str, clubs_dir: Path = CONFIG_DIR / "clubs") -> ClubConfig:
     """Load a club by file stem, e.g. load_club('man_utd')."""
     path = clubs_dir / f"{name}.yaml"
@@ -101,4 +147,11 @@ def load_club(name: str, clubs_dir: Path = CONFIG_DIR / "clubs") -> ClubConfig:
     missing = {r for r in club.roles.values() if r not in roles}
     if missing:
         raise ValueError(f"{club.club}: roles not in roles.yaml: {sorted(missing)}")
+    if club.formation is not None:
+        slots = {s.key for s in lineup(club)}
+        stray = set(club.roles) - slots
+        if stray:
+            raise ValueError(
+                f"{club.club}: roles for slots not in {club.formation}: {sorted(stray)}"
+            )
     return club
