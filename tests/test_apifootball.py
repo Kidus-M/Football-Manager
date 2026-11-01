@@ -132,6 +132,17 @@ def test_plan_error_is_its_own_exception(tmp_path):
     assert info.value.latest == 2024
 
 
+def test_http_429_daily_limit_is_quota_exhausted(tmp_path):
+    body = {"errors": {"rateLimit": "You have reached your daily request limit."}}
+    client = CachedClient("af", cache_dir=tmp_path, min_interval=0)
+    client._client = httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(429, json=body))
+    )
+    with pytest.raises(af.QuotaExhausted):
+        af.fetch_page(client, 39, 2024, 1)
+    assert not any(tmp_path.rglob("*.cache"))
+
+
 def test_ok_page_is_cached(tmp_path):
     client = _client(tmp_path, PAGE)
     assert af.fetch_page(client, 39, 2026, 1)["paging"]["total"] == 1

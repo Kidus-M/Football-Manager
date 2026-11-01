@@ -24,6 +24,7 @@ import os
 import re
 from pathlib import Path
 
+import httpx
 import pandas as pd
 
 from recruit_intel import ROOT
@@ -98,7 +99,13 @@ MAX_FREE_PAGE = 3  # the free plan refuses page > 3 on /players
 def _get(client: CachedClient, path: str, params: dict) -> dict:
     """GET an endpoint; API errors (HTTP 200 + `errors`) raise and are never cached."""
     url = f"{BASE}/{path}"
-    body = json.loads(client.get_text(url, params))
+    try:
+        body = json.loads(client.get_text(url, params))
+    except httpx.HTTPStatusError as exc:
+        # The daily limit also comes back as HTTP 429 (errors.rateLimit).
+        if exc.response.status_code == 429:
+            raise QuotaExhausted(exc.response.text[:200]) from exc
+        raise
     errors = body.get("errors")
     if errors:  # never keep an error response in the cache
         client._path(url, params).unlink(missing_ok=True)
