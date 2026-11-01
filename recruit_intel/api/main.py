@@ -4,6 +4,8 @@ Read-only over the DuckDB file; every route is a thin wrapper over
 api/service.py, which reuses the same analysis code as the CLI.
 """
 
+import threading
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query
@@ -11,7 +13,26 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from recruit_intel.api import service
 
-app = FastAPI(title="Recruitment intelligence API", version="0.1.0")
+
+def _warm_caches() -> None:
+    """The first lineup/tactics/search request computes percentiles for the
+    whole league; doing it at startup keeps the first page load from timing
+    out behind the dashboard's proxy. Failures surface on the real request."""
+    try:
+        service.lineup_view()
+        service.tactics_view()
+        service._pool()
+    except Exception:  # noqa: BLE001 - warm-up is best effort
+        pass
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    threading.Thread(target=_warm_caches, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="Recruitment intelligence API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -35,9 +56,18 @@ def formations():
 
 
 @app.get("/api/lineup")
-def lineup(formation: str | None = None):
+def lineup(
+    formation: str | None = None,
+    press: str | None = None,
+    buildup: str | None = None,
+    width: str | None = None,
+):
+    """Best XI; press/buildup/width give the tactical what-if XI."""
+    choices = tuple(
+        (k, v) for k, v in (("press", press), ("buildup", buildup), ("width", width)) if v
+    )
     try:
-        return service.lineup_view(formation)
+        return service.lineup_view(formation, choices)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 

@@ -100,9 +100,11 @@ def _gap_report(formation: str | None, choices: tuple = ()) -> tuple[pd.DataFram
     return gaps.gap_report(con(), club(), season(), formation, roles=roles)
 
 
-def lineup_view(formation: str | None = None) -> dict:
-    report, chart = _gap_report(formation)
-    roles = load_roles()
+def lineup_view(formation: str | None = None, choices: tuple = ()) -> dict:
+    """Best XI; `choices` (e.g. (("press", "high"),)) re-runs it under
+    tactically reweighted roles."""
+    report, chart = _gap_report(formation, choices)
+    roles = tactics.reweight(load_roles(), dict(choices)) if choices else load_roles()
     slots = []
     for row, depth in zip(report.itertuples(), chart, strict=True):
         s = depth.slot

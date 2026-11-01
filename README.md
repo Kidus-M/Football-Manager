@@ -36,6 +36,24 @@ py -3.12 -m venv .venv
 
 Club is chosen with `--club <file stem>` (default `man_utd`, from `config/clubs/`).
 
+## Dashboard
+
+A Next.js app in `app/` over a read-only FastAPI backend (`recruit_intel/api/`).
+
+```bash
+.venv/Scripts/pip install -e ".[api,ml]"
+.venv/Scripts/uvicorn recruit_intel.api.main:app --port 8000   # API (warms its caches on start)
+npm --prefix app install
+npm --prefix app run dev                                      # http://localhost:3000
+```
+
+Views: **Lineup** (best XI on the pitch, gaps glowing in club colour, formation
+switch), **Recruit** (ranked candidates with live filters), **Compare** (radars),
+**Similar** (style map of every player), **Tactics** (pressing/build-up/width
+what-ifs re-run the XI). Ctrl/Cmd+K jumps to any player or view. The club's
+colours come from its config, so another club config re-skins the app. Design
+rationale and references: `docs/design/`.
+
 ## Player identity
 
 Each source names players differently ("Bruno Borges Fernandes", "Bruno Fernandes"),
