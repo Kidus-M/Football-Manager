@@ -158,7 +158,9 @@ def fetch_league_clubs(client: CachedClient, country: str, season: int) -> pd.Da
 
 
 def fetch_squad(client: CachedClient, club_id: str | int, season: int) -> dict[str, pd.DataFrame]:
-    return parse_squad(client.get_text(squad_url(club_id, season)), date.today())
+    out = parse_squad(client.get_text(squad_url(club_id, season)), date.today())
+    out["source_players"]["team_id"] = str(club_id)
+    return out
 
 
 def ingest_club(club_id: str | int, season: int, client=None) -> dict[str, pd.DataFrame]:

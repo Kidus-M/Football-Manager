@@ -9,8 +9,9 @@ Runs locally on free data. A personal research project, not a commercial product
 ```bash
 py -3.12 -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"
-.venv/Scripts/recruit ingest          # FPL, Understat (club's recruitment pool), ClubElo -> data/recruit.duckdb
-.venv/Scripts/recruit squad           # current squad with per-90 stats
+.venv/Scripts/recruit ingest          # FPL, Understat (club's pool), ClubElo, club's Transfermarkt squad
+.venv/Scripts/recruit ingest --market-pool ENG   # + every Transfermarkt squad in those leagues (slow first run)
+.venv/Scripts/recruit squad           # current squad: value, contract, per-90 stats
 .venv/Scripts/pytest
 ```
 

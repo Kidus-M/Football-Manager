@@ -98,6 +98,7 @@ MIGRATIONS = """
 ALTER TABLE source_players ADD COLUMN IF NOT EXISTS detailed_position TEXT;
 ALTER TABLE source_players ADD COLUMN IF NOT EXISTS height_cm INTEGER;
 ALTER TABLE source_players ADD COLUMN IF NOT EXISTS foot TEXT;
+ALTER TABLE source_players ADD COLUMN IF NOT EXISTS team_id TEXT;
 ALTER TABLE market ADD COLUMN IF NOT EXISTS joined_date DATE;
 """
 
