@@ -46,7 +46,59 @@ def cmd_train(args: argparse.Namespace) -> int:
     print(f"\n  Learned league factors (output kept moving to {projection.REFERENCE}):")
     for comp, f in sorted(report["league_factors"].items(), key=lambda kv: -kv[1]):
         print(f"    {comp:<22} {f:.2f}")
+
+    from recruit_intel.models import team_style
+
+    style, sm = team_style.fit(team_style.team_seasons(con))
+    team_style.save(style)
+    print(f"\nTeam style ({sm['team_seasons']} team-seasons)")
+    print("  share of each feature explained by team strength (removed before styling):")
+    print("   " + ", ".join(f"{k} {v:.0%}" for k, v in sm["strength_r2"].items()))
+    print(f"  2-D style map reconstruction MSE {sm['map_test_mse']} (mean predictor: 1.0)")
+
     print("\nSaved to data/models/; `recruit search` now uses the learned league factors.")
+    return 0
+
+
+def _find_team(seasons: pd.DataFrame, query: str) -> pd.DataFrame:
+    from recruit_intel.identity.names import normalize
+
+    words = normalize(query).split()
+    names = seasons.team_name.map(normalize)
+    hits = seasons[names.map(lambda n: all(w in n for w in words))]
+    exact = hits[names[hits.index] == " ".join(words)]
+    return exact if not exact.empty else hits
+
+
+def cmd_style(args: argparse.Namespace) -> int:
+    from recruit_intel.models import team_style
+
+    con = db.connect(args.db)
+    seasons = team_style.team_seasons(con)
+    model = team_style.load()
+    hits = _find_team(seasons, args.team)
+    teams = hits.team_name.unique()
+    if len(teams) != 1:
+        print(f"'{args.team}' matched {len(teams)} teams: {', '.join(teams[:8]) or 'none'}")
+        return 1
+    team = hits.sort_values("season")
+    team = team.assign(traits=model.traits(team))
+    team["strength"] = team.xpts_pm.round(2)
+    team["season_"] = team.season.map(lambda s: f"{s}-{(s + 1) % 100:02d}")
+    print(f"{teams[0]}: style by season (strength = expected points per match)\n")
+    with pd.option_context(*[kv for pair in WIDE.items() for kv in pair]):
+        print(team[["season_", "competition_id", "matches", "strength", "traits"]]
+              .tail(args.last).to_string(index=False))  # fmt: skip
+
+    row = seasons.index.get_loc(team.index[-1])
+    near = team_style.nearest_teams(seasons, model, row, k=args.limit)
+    near = near.assign(traits=model.traits(near), strength=near.xpts_pm.round(2),
+                       season_=near.season.map(lambda s: f"{s}-{(s + 1) % 100:02d}"))  # fmt: skip
+    print(f"\nTeams that played most like {teams[0]} {team.season_.iloc[-1]} "
+          f"(style map, strength removed):\n")  # fmt: skip
+    with pd.option_context(*[kv for pair in WIDE.items() for kv in pair]):
+        print(near[["team_name", "season_", "strength", "traits", "distance"]]
+              .round(2).to_string(index=False))  # fmt: skip
     return 0
 
 
@@ -144,6 +196,12 @@ def register(sub) -> None:
     p = sub.add_parser("roles", help="discover playing roles by clustering embeddings")
     p.add_argument("--seasons", type=int, default=2)
     p.set_defaults(func=cmd_roles)
+
+    p = sub.add_parser("style", help="a team's playing style by season, and teams like it")
+    p.add_argument("team")
+    p.add_argument("--last", type=int, default=6, help="how many seasons to show")
+    p.add_argument("--limit", type=int, default=8)
+    p.set_defaults(func=cmd_style)
 
     p = sub.add_parser("bargains", help="players valued below what comparable players cost")
     p.add_argument("--group", help="position group, e.g. CB, W, ST")
