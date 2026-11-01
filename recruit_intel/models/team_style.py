@@ -127,6 +127,7 @@ def fit(df: pd.DataFrame, epochs: int = 400) -> tuple[StyleModel, dict]:
     resid = x - (intercept + np.outer(q, slope))
     r2 = 1 - resid.var(axis=0) / x.var(axis=0)
 
+    torch.manual_seed(7)  # weight init too, so a fit doesn't depend on earlier RNG use
     model = StyleModel(slope, intercept, resid.std(axis=0), AutoEncoder(len(STYLE_FEATURES), 2))
     z = model.adjusted(df)
     rng = np.random.default_rng(7)

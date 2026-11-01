@@ -106,6 +106,7 @@ def train(df: pd.DataFrame, epochs: int = 300, lr: float = 3e-3) -> tuple[Embedd
     cut = int(len(x) * 0.85)
     train_df, test_df = df.iloc[idx[:cut]], df.iloc[idx[cut:]]
 
+    torch.manual_seed(SEED)  # weight init too, independent of earlier RNG use
     model = AutoEncoder()
     emb = Embedder(model, mean.astype(np.float32), std.astype(np.float32))
     fit_autoencoder(model, emb._scale(train_df), epochs, lr)
