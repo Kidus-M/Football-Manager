@@ -57,16 +57,37 @@ def reweight(roles: dict[str, Role], choices: dict[str, str], config: dict | Non
 
 def instructions(starters: pd.DataFrame, config: dict | None = None) -> list[tuple[str, str]]:
     """(player name, instruction) for every rule a starter satisfies, in XI
-    order. Missing metrics never satisfy a condition."""
+    order. Missing metrics never satisfy a condition. A rule marked `once`
+    (a job only one player can do, like dropping between the centre-backs)
+    goes to the qualifying starter with the highest value on its first
+    condition. Starters flagged unqualified get a small-sample note."""
     config = config or load_config()
+    winners: dict[int, str] = {}
+    for i, rule in enumerate(config["instructions"]):
+        if not rule.get("once"):
+            continue
+        first = next(iter(rule["when"]))
+        eligible = starters[starters.group.isin(rule["groups"])]
+        eligible = eligible[[_rule_holds(r, rule) for _, r in eligible.iterrows()]]
+        if not eligible.empty:
+            winners[i] = eligible.sort_values(first, ascending=False).iloc[0]["name"]
+
     out = []
     for _, row in starters.iterrows():
-        for rule in config["instructions"]:
-            if row["group"] not in rule["groups"]:
+        for i, rule in enumerate(config["instructions"]):
+            if row["group"] not in rule["groups"] or not _rule_holds(row, rule):
                 continue
-            if all(_holds(row.get(metric), cond) for metric, cond in rule["when"].items()):
-                out.append((row["name"], rule["say"].format(name=row["name"])))
+            if rule.get("once") and winners.get(i) != row["name"]:
+                continue
+            text = rule["say"].format(name=row["name"])
+            if row.get("qualified") is False:
+                text += f" (small sample: {int(row['minutes'])} min)"
+            out.append((row["name"], text))
     return out
+
+
+def _rule_holds(row: pd.Series, rule: dict) -> bool:
+    return all(_holds(row.get(metric), cond) for metric, cond in rule["when"].items())
 
 
 def _holds(value, condition: str) -> bool:
@@ -110,8 +131,11 @@ STYLE_SIGNAL = {"press": ("ppda", -1), "buildup": ("buildup_share", 1), "finishi
 STYLE_HIGH = 0.5  # adjusted z beyond which a team clearly leans one way
 
 
-def lever_readings(starters: pd.DataFrame, config: dict | None = None) -> list[LeverReading]:
-    """starters: percentile rows of the XI (one per player, with `group`)."""
+def lever_readings(starters: pd.DataFrame, config: dict | None = None,
+                   min_minutes: int | None = None) -> list[LeverReading]:  # fmt: skip
+    """starters: percentile rows of the XI (one per player, with `group`).
+    With `min_minutes`, each player's percentile is shrunk toward 50 by his
+    sample size, so a cameo can't swing a lever."""
     config = config or load_config()
     out = []
     for lever, spec in config["levers"].items():
@@ -121,14 +145,25 @@ def lever_readings(starters: pd.DataFrame, config: dict | None = None) -> list[L
             out.append(LeverReading(lever, None, "unknown", [], []))
             continue
         per_player = rows[metrics].mean(axis=1, skipna=True)
+        if min_minutes:
+            weight = (rows["minutes"] / min_minutes).clip(upper=1.0)
+            per_player = 50 + (per_player - 50) * weight
         per_player.index = rows["name"].to_numpy()
         per_player = per_player.dropna().sort_values(ascending=False)
         value = float(per_player.mean()) if len(per_player) else None
         verdict = ("unknown" if value is None else "high" if value >= spec["high_at"]
                    else "low" if value <= spec["low_at"] else "mid")  # fmt: skip
         fmt = [f"{n} {v:.0f}" for n, v in per_player.items()]
-        out.append(LeverReading(lever, value, verdict, fmt[:2], fmt[-2:][::-1]))
+        # With fewer than four players, best and worst lists would overlap.
+        worst = fmt[-2:][::-1] if len(fmt) >= 4 else []
+        out.append(LeverReading(lever, value, verdict, fmt[:2], worst))
     return out
+
+
+def ordinal(n: float) -> str:
+    n = round(n)
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
 
 
 def style_lean(z: float | None) -> str:
@@ -155,7 +190,7 @@ def advise(r: LeverReading) -> str:
         return f"{squad}: the players support {more} than the team currently plays"
     if r.verdict == "low" and team == "high":
         return f"{squad}: the team {verb} beyond what these players' numbers support"
-    if r.verdict == "low" and team != "high":
+    if r.verdict == "low":
         return f"{squad}: consistent with {less}; recruit here before asking for more"
     return f"{squad}: style and squad are aligned"
 

@@ -39,16 +39,20 @@ levers:
 
 # Per-position instructions. A rule fires for a starter in one of `groups`
 # when every condition holds (metric percentile >= or <= the number).
-# `{name}` is replaced by the player's name.
+# `{name}` is replaced by the player's name. `once: true` gives a job only one
+# player can do (e.g. dropping between the centre-backs) to the strongest
+# qualifying starter only.
 instructions:
   - groups: [GK]
     when: {xg_buildup: ">=65"}
+    once: true
     say: "{name} can be the spare man in build-up: play out from goal kicks"
   - groups: [GK]
     when: {xg_buildup: "<=35"}
     say: "{name} is not a build-up outlet: build through the centre-backs or go long under pressure"
   - groups: [CB]
     when: {xg_buildup: ">=65"}
+    once: true
     say: "{name} starts attacks: let him carry or split wide in the first phase"
   - groups: [CB]
     when: {xg_buildup: "<=30"}
@@ -67,12 +71,14 @@ instructions:
     say: "{name} wins the ball back: use him to screen and to step into the press"
   - groups: [DM, CM]
     when: {xg_buildup: ">=70"}
+    once: true
     say: "{name} dictates play: drop him between the centre-backs to start possession"
   - groups: [CM, AM]
     when: {npxg: ">=70"}
     say: "{name} arrives in the box: license late runs beyond the striker"
   - groups: [CM, AM]
     when: {key_passes: ">=70"}
+    once: true
     say: "{name} is the creator: free him in the half-spaces between the lines"
   - groups: [W]
     when: {npxg: ">=70", shots: ">=65"}

@@ -362,7 +362,7 @@ def cmd_tactics(args: argparse.Namespace) -> int:
         print()
 
     print("What the XI is suited to")
-    for r in tactics.lever_readings(starters):
+    for r in tactics.lever_readings(starters, min_minutes=squad.attrs["min_minutes"]):
         if ctx is not None and r.lever in tactics.STYLE_SIGNAL:
             from recruit_intel.models.club_context import lever_z
 
