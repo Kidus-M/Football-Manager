@@ -14,6 +14,7 @@ from recruit_intel.features.metrics import METRICS
 from recruit_intel.features.per90 import per90_table
 from recruit_intel.features.percentiles import percentiles
 from recruit_intel.features.positions import GROUPS
+from recruit_intel.identity.names import normalize
 
 STRENGTH = 80  # percentile at or above which a metric is a strength
 WEAKNESS = 20  # at or below which it is a weakness
@@ -50,13 +51,35 @@ def role_fit(row: pd.Series, role: Role) -> RoleFit | None:
     return RoleFit(role.key, score, coverage)
 
 
-def best_role(row: pd.Series, roles: dict[str, Role]) -> RoleFit | None:
+def role_fits(row: pd.Series, roles: dict[str, Role]) -> list[RoleFit]:
+    """Every role the player can be scored for, best first."""
     fits = [f for r in roles.values() if (f := role_fit(row, r))]
-    return max(fits, key=lambda f: f.score, default=None)
+    return sorted(fits, key=lambda f: f.score, reverse=True)
+
+
+def best_role(row: pd.Series, roles: dict[str, Role]) -> RoleFit | None:
+    fits = role_fits(row, roles)
+    return fits[0] if fits else None
 
 
 def label(metric: str) -> str:
     return METRICS[metric].label
+
+
+def peer_percentiles(con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int):
+    """Percentiles for every player in the club's peer-group competition."""
+    return percentiles(per90_table(con, season), club.peer_group)
+
+
+def find_players(pct: pd.DataFrame, query: str) -> pd.DataFrame:
+    """Players whose name contains every word of `query`, accents ignored.
+    An exact full-name match wins outright."""
+    words = normalize(query).split()
+    names = pct["name"].map(normalize)
+    exact = pct[names == " ".join(words)]
+    if not exact.empty:
+        return exact
+    return pct[names.map(lambda n: all(w in n.split() or w in n for w in words))]
 
 
 def squad_profile(con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int) -> pd.DataFrame:
@@ -75,8 +98,7 @@ def squad_profile(con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int)
         .player_id
     )
 
-    table = per90_table(con, season)
-    pct = percentiles(table, club.peer_group)
+    pct = peer_percentiles(con, club, season)
     squad = pct[pct.player_id.isin(squad_ids)]
 
     roles = load_roles()
