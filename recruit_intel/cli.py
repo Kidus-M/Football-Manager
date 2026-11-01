@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from recruit_intel import DATA_DIR, db
+from recruit_intel import DATA_DIR, cli_models, db
 from recruit_intel.analysis import gaps, profile, radar
 from recruit_intel.analysis.squad import current_squad
 from recruit_intel.config import load_club, load_roles
@@ -370,6 +370,8 @@ def main(argv: list[str] | None = None) -> int:
         "--upgrades", action="store_true", help="only candidates whose fit beats the starter's"
     )
     p_search.set_defaults(func=cmd_search)
+
+    cli_models.register(sub)
 
     args = parser.parse_args(argv)
     return args.func(args)
