@@ -25,21 +25,18 @@ def league_strength(path: Path = CONFIG_DIR / "leagues.yaml") -> dict[str, float
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def candidate_pool(
-    con: duckdb.DuckDBPyConnection, seasons: list[int], competitions: list[str] | None = None
-) -> pd.DataFrame:
-    """Percentile rows plus club, age, value_eur, contract_year per player."""
-    table = per90_table(con, seasons)
-    comps = competitions or sorted(table.competition_id.unique())
-    parts = [percentiles(table, comp) for comp in comps if (table.competition_id == comp).any()]
-    pct = pd.concat(parts, ignore_index=True)
-    pct = pct.sort_values("minutes", ascending=False).drop_duplicates("player_id")
+def _main_league(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep each player's row from the league he played most in."""
+    return df.sort_values("minutes", ascending=False).drop_duplicates("player_id")
 
-    ids = pct.player_id.tolist()
+
+def with_market(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> pd.DataFrame:
+    """Add club, age, value_eur and contract_year (Transfermarkt) by player_id."""
+    ids = df.player_id.tolist()
     market = market_snapshot(con, ids).drop(columns="detailed_position")
     info = con.execute(
         """
-        SELECT pl.player_id, pl.birth_date, any_value(p.team_name) AS club
+        SELECT pl.player_id, pl.birth_date AS _born, any_value(p.team_name) AS club
         FROM players pl
         LEFT JOIN player_source_ids ids
           ON ids.player_id = pl.player_id AND ids.source = 'transfermarkt'
@@ -49,10 +46,25 @@ def candidate_pool(
         """,
         [ids],
     ).df()
-    pool = pct.merge(info, on="player_id", how="left").merge(market, on="player_id", how="left")
+    out = df.merge(info, on="player_id", how="left").merge(market, on="player_id", how="left")
+    born = pd.to_datetime(out.pop("_born"))
+    out["age"] = ((pd.Timestamp(date.today()) - born).dt.days // 365.25).astype("Int64")
+    out["contract_year"] = pd.to_datetime(out.pop("contract_end")).dt.year.astype("Int64")
+    out["value_eur"] = pd.to_numeric(out["value_eur"])
+    return out.reset_index(drop=True)
 
-    born = pd.to_datetime(pool.pop("birth_date"))
-    pool["age"] = ((pd.Timestamp(date.today()) - born).dt.days // 365.25).astype("Int64")
-    pool["contract_year"] = pd.to_datetime(pool.pop("contract_end")).dt.year.astype("Int64")
-    pool["value_eur"] = pd.to_numeric(pool["value_eur"])
-    return pool.reset_index(drop=True)
+
+def candidate_pool(
+    con: duckdb.DuckDBPyConnection, seasons: list[int], competitions: list[str] | None = None
+) -> pd.DataFrame:
+    """Percentile rows plus club, age, value_eur, contract_year per player."""
+    table = per90_table(con, seasons)
+    comps = competitions or sorted(table.competition_id.unique())
+    parts = [percentiles(table, comp) for comp in comps if (table.competition_id == comp).any()]
+    return with_market(con, _main_league(pd.concat(parts, ignore_index=True)))
+
+
+def per90_pool(con: duckdb.DuckDBPyConnection, seasons: list[int]) -> pd.DataFrame:
+    """Raw per-90 rows (not percentiles) plus market context, one per player."""
+    table = per90_table(con, seasons).drop(columns="birth_date")
+    return with_market(con, _main_league(table))
