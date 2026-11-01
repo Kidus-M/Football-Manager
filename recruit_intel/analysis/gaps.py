@@ -16,7 +16,7 @@ import pandas as pd
 from recruit_intel.analysis.lineup import SlotDepth, depth_chart
 from recruit_intel.analysis.profile import squad_percentiles, squad_roster
 from recruit_intel.analysis.squad import market_snapshot
-from recruit_intel.config import ClubConfig, lineup, load_roles
+from recruit_intel.config import ClubConfig, Role, lineup, load_roles
 
 SEVERITY = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 
@@ -61,12 +61,17 @@ def slot_issues(depth: SlotDepth, age: int | None, contract_year: int | None,
 
 
 def gap_report(
-    con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int, formation: str | None = None
+    con: duckdb.DuckDBPyConnection,
+    club: ClubConfig,
+    season: int,
+    formation: str | None = None,
+    roles: dict[str, Role] | None = None,
 ) -> tuple[pd.DataFrame, list[SlotDepth]]:
-    """One row per slot (formation order) plus the underlying depth chart."""
+    """One row per slot (formation order) plus the underlying depth chart.
+    `roles` overrides the role library (tactical what-ifs reweight it)."""
     squad = squad_percentiles(con, club, season)
     slots = lineup(club, formation)
-    roles = load_roles()
+    roles = roles or load_roles()
     roster = squad_roster(con, club)
     chart = depth_chart(squad, slots, roles, squad.attrs["min_minutes"], roster)
 
