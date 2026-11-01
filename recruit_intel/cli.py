@@ -359,6 +359,29 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_audit(args: argparse.Namespace) -> int:
+    from recruit_intel import quality
+
+    con = db.connect(args.db)
+    if args.fix:
+        affected = quality.fix(con)
+        print("Fixed: " + (", ".join(f"{k} {v}" for k, v in affected.items() if v) or "nothing"))
+        if any(affected.values()):
+            print("Rebuilding identity links after the fixes…")
+            identity_run.rebuild(con)
+        print()
+    report = quality.audit(con)
+    for r in report.itertuples():
+        mark = "ok" if r.rows == 0 else ("fixable" if r.fixable else "check")
+        print(f"  [{mark:>7}] {r.check}: {r.rows}  ({r.what})")
+        for example in r.examples if args.examples else []:
+            print(f"            e.g. {example}")
+    remaining = report[(report.rows > 0) & report.fixable]
+    if len(remaining) and not args.fix:
+        print("\nRun `recruit audit --fix` to repair the fixable ones.")
+    return 0
+
+
 def _style_context(con, club):
     """Club style and manager context, or None without the ml extra / models."""
     try:
@@ -556,6 +579,11 @@ def main(argv: list[str] | None = None) -> int:
     p_tac.add_argument("--buildup", choices=["short", "direct"])
     p_tac.add_argument("--width", choices=["wide", "narrow"])
     p_tac.set_defaults(func=cmd_tactics)
+
+    p_audit = sub.add_parser("audit", help="check the database for data problems")
+    p_audit.add_argument("--fix", action="store_true", help="repair the safely fixable ones")
+    p_audit.add_argument("--examples", action="store_true", help="show example rows")
+    p_audit.set_defaults(func=cmd_audit)
 
     cli_models.register(sub)
 
