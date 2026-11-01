@@ -237,9 +237,12 @@ def _system_fit(con, club, player_ids) -> pd.Series | None:
         model, report = team_fit.load()
         if not team_fit.style_adds_skill(report):
             return None
-        return team_fit.fit_for_destination(
+        effect = team_fit.fit_for_destination(
             con, model, team_style.load(), player_ids, str(club.source_name("understat"))
         )
+        # The club's style lifts or lowers almost everyone's output a bit; what
+        # separates candidates is how much more (or less) it suits each one.
+        return effect - effect.median()
     except (ImportError, FileNotFoundError, LookupError):
         return None
 

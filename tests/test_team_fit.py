@@ -47,3 +47,14 @@ def test_fit_score_recovers_the_planted_lift():
     assert press == pytest.approx(25, abs=7)  # planted: +25% at pressing teams
     assert sit == pytest.approx(0, abs=5)
     assert isinstance(model, FitModel)
+
+
+def test_style_effect_strips_changes_that_happen_anywhere():
+    pairs = _pairs()
+    for f in ("npxg", "xa", "xg_chain"):  # everyone regresses 20% wherever they go
+        pairs[f"{f}_next"] *= 0.8
+    model = train(pairs)
+    sample = pairs.sample(200, random_state=1)
+    sit = sample.assign(dest_ppda=1.5)
+    assert model.fit_score(sit).mean() < -10  # raw projection carries the drop
+    assert model.style_effect(sit).mean() == pytest.approx(0, abs=5)  # style didn't cause it

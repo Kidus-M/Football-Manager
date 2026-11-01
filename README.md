@@ -25,6 +25,10 @@ py -3.12 -m venv .venv
 .venv/Scripts/recruit similar Mbeumo --younger --cheaper --not-ours
 .venv/Scripts/recruit roles           # playing roles discovered by clustering
 .venv/Scripts/recruit bargains --group CB --max-age 25
+.venv/Scripts/recruit ingest --seasons 11 --managers   # manager histories (slow first run)
+.venv/Scripts/recruit style "Manchester United"   # strength-adjusted style by season, teams alike
+.venv/Scripts/recruit manager "De Zerbi"          # a manager's style across clubs
+.venv/Scripts/recruit fit Diakite "Wesley Fofana" # how a club's style suits players
 .venv/Scripts/pytest
 ```
 

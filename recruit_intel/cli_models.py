@@ -96,13 +96,18 @@ def cmd_fit(args: argparse.Namespace) -> int:
             print(f"'{query}' matched {len(hits)} players: {', '.join(hits.name.head(8))}")
             return 1
         rows.append(hits.iloc[0])
-    scores = team_fit.fit_for_destination(
-        con, model, team_style.load(), [r.player_id for r in rows], dest
+    effect = team_fit.fit_for_destination(
+        con, model, team_style.load(), pool.player_id.tolist(), dest
     )
-    print(f"Projected change in attacking involvement (npxG + xA + xGChain) at {dest}:\n")
+    typical = effect.median()
+    print(f"{dest}'s current style vs a typical side of its strength: projected "
+          f"{typical:+.0f}% attacking involvement (npxG + xA + xGChain) for the typical "
+          f"player.\n\nStyle fit: how much more (+) or less (-) it suits each player, "
+          f"percentage points:\n")  # fmt: skip
     for r in rows:
-        s = scores.get(r.player_id)
-        print(f"  {r['name']:<28} {'no qualifying season' if s is None else f'{s:+.0f}%'}")
+        s = effect.get(r.player_id)
+        txt = "no qualifying season" if s is None else f"{s - typical:+.0f}"
+        print(f"  {r['name']:<28} {txt}")
     if not team_fit.style_adds_skill(report):
         print("\n  Caution: on held-out seasons this model did not beat a strength-only "
               "version, so treat these as unvalidated.")  # fmt: skip

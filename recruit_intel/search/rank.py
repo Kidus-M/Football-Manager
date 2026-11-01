@@ -104,9 +104,9 @@ def rank(
     budget: int | None = None,
     system_fit: pd.Series | None = None,
 ) -> pd.DataFrame:
-    """`system_fit`: optional % change in output at the club (player-team fit
-    model) by player_id. When given it takes SYSTEM_WEIGHT from role fit;
-    players without one score neutral (0%)."""
+    """`system_fit`: optional style fit at the club by player_id, in percentage
+    points relative to a typical player (player-team fit model). When given it
+    takes SYSTEM_WEIGHT from role fit; players without one score neutral (0)."""
     cands = apply_filters(pool, filters)
     cands = cands.merge(fit_scores(cands, role, filters.groups, strength), on="player_id")
     if cands.empty:
@@ -144,5 +144,5 @@ def _why(r) -> str:
     if pd.notna(r.contract_year):
         parts.append(f"contract {r.contract_year}")
     if pd.notna(getattr(r, "system_fit", None)):
-        parts.append(f"system {r.system_fit:+.0f}%")
+        parts.append(f"style fit {r.system_fit:+.0f}")
     return ", ".join(parts)

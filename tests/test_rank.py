@@ -76,7 +76,7 @@ def test_system_fit_breaks_a_tie_and_shows_in_why():
     fits = pd.Series({"a": -10.0, "b": 12.0})
     ranked = rank(pool, ROLE, Filters(groups=["ST"]), STRENGTH, 2027, system_fit=fits)
     assert list(ranked.player_id) == ["b", "a"]
-    assert "system +12%" in ranked.why.iloc[0]
+    assert "style fit +12" in ranked.why.iloc[0]
 
 
 @pytest.mark.parametrize("age,expected", [(24, 100), (29, 50), (34, 10), (18, 75)])

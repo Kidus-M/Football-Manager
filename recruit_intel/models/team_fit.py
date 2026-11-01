@@ -13,8 +13,10 @@ beyond strength. So an ablation with the destination's style blanked
 next seasons. The fit score is only meaningful if the full model beats the
 ablation there; `validate` reports both.
 
-Fit score for a player at a team: predicted change in his attacking
-involvement (mean of npxG, xA and xGChain, log scale), as a percentage.
+Fit for a player at a team is counterfactual: the projected % change in his
+attacking involvement (npxG + xA + xGChain) at that team minus the change
+at a typical team of the same strength. Regression to the mean and ageing
+happen anywhere, so only the style's own effect is left.
 """
 
 from dataclasses import dataclass
@@ -150,6 +152,15 @@ class FitModel:
         nxt = np.expm1(now + self.predict_delta(df)[:, idx])
         return (nxt.sum(axis=1) / np.expm1(now).sum(axis=1) - 1) * 100
 
+    def style_effect(self, df: pd.DataFrame) -> np.ndarray:
+        """Percentage points of output change due to the destination's *style*:
+        projected change there minus at a typical side of the same strength
+        (adjusted style all zero). Removes regression to the mean and ageing,
+        which happen wherever the player goes."""
+        neutral = df.copy()
+        neutral[TEAM_COLS[1:]] = 0.0
+        return self.fit_score(df) - self.fit_score(neutral)
+
 
 def _targets(df: pd.DataFrame) -> np.ndarray:
     nxt = df[[f"{f}_next" for f in EMBED_FEATURES]].set_axis(EMBED_FEATURES, axis=1)
@@ -220,9 +231,10 @@ def fit_for_destination(
     player_ids: list[str],
     dest_team: str,
 ) -> pd.Series:
-    """Fit score (% change in attacking involvement) of canonical players
-    moving to `dest_team` (Understat name) as it plays this season. Each
-    player is described by his latest qualifying season at a single club."""
+    """Style effect (percentage points of attacking involvement vs a typical
+    side of the same strength) for canonical players moving to `dest_team`
+    (Understat name) as it plays this season. Each player is described by his
+    latest qualifying season at a single club."""
     teams = team_context(con, style)
     names = con.execute("SELECT DISTINCT team_id, team_name, season FROM team_matches").df()
     dest_rows = names[names.team_name == dest_team].merge(teams, on=["team_id", "season"])
@@ -244,7 +256,7 @@ def fit_for_destination(
         rows[col] = dest[col].iloc[0]
     if rows.empty:
         return pd.Series(dtype=float)
-    return pd.Series(model.fit_score(rows), index=rows.player_id.to_numpy())
+    return pd.Series(model.style_effect(rows), index=rows.player_id.to_numpy())
 
 
 def validate(pairs: pd.DataFrame) -> dict:
