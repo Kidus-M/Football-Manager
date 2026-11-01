@@ -1,8 +1,9 @@
 from datetime import date
 
 import pandas as pd
+import pytest
 
-from recruit_intel.identity.matcher import build_identity, name_score
+from recruit_intel.identity.matcher import build_identity, name_score, surnames_agree
 
 EPL, LIGA = "ENG-Premier League", "ESP-La Liga"
 
@@ -88,6 +89,21 @@ def test_shared_surname_in_club_does_not_match():
         _squad("Jeff Chabot", "Tom Chabot"), FPL.iloc[:0], _understat("Julian Chabot")
     )
     assert ids_by_source(out)[("understat", "900")] == "us-900"
+
+
+@pytest.mark.parametrize(
+    "a,b,allow_single,expected",
+    [
+        ("Alberto Moreno", "Alberto Dossena", True, False),  # first name only
+        ("Diego Morcillo", "Diego Murillo", False, False),  # similar but different surname
+        ("Fernando Niño", "Fer Niño", False, True),
+        ("Ísak Bergmann Jóhannesson", "Ísak Jóhannesson", False, True),
+        ("Kepa", "Kepa Arrizabalaga", True, True),
+        ("Aarón", "Aarón Ochoa", False, False),  # one word: only trusted within a club
+    ],
+)
+def test_surnames_agree(a, b, allow_single, expected):
+    assert surnames_agree(a, b, allow_single) is expected
 
 
 def test_unmatched_player_keeps_source_id_and_canonical_row():

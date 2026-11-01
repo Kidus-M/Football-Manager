@@ -11,11 +11,22 @@ py -3.12 -m venv .venv
 .venv/Scripts/pip install -e ".[dev]"
 .venv/Scripts/recruit ingest          # FPL, Understat (club's pool), ClubElo, club's Transfermarkt squad
 .venv/Scripts/recruit ingest --market-pool ENG   # + every Transfermarkt squad in those leagues (slow first run)
+.venv/Scripts/recruit match           # rebuild canonical player ids (ingest also runs this)
 .venv/Scripts/recruit squad           # current squad: value, contract, per-90 stats
 .venv/Scripts/pytest
 ```
 
 Club is chosen with `--club <file stem>` (default `man_utd`, from `config/clubs/`).
+
+## Player identity
+
+Each source names players differently ("Bruno Borges Fernandes", "Bruno Fernandes"),
+so every source row is linked to one canonical `player_id` in `player_source_ids`.
+Transfermarkt anchors the ids (`tm-<id>`); FPL links by birth date, Understat by
+club, then league, then globally, each step stricter. Names must agree on surname,
+and clubs that fuzzy matching can't map go in `config/team_aliases.yaml`.
+`recruit match` prints the match rate; the target is 95%+ of this season's top-5
+league players.
 
 ## Layout
 

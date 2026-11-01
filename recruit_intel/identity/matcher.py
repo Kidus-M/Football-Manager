@@ -33,24 +33,43 @@ def name_score(a: str, b: str) -> float:
     return 0.7 * fuzz.token_set_ratio(a, b) + 0.3 * fuzz.token_sort_ratio(a, b)
 
 
+def surnames_agree(a: str, b: str, allow_single: bool) -> bool:
+    """Guard against first-name-only matches ('Alberto Moreno' / 'Alberto Dossena').
+
+    Two-word names must share a surname: the last word of one appears in the
+    other, or the last words are near-identical spellings. A one-word name
+    ('Kepa') must appear in the other name, and is only trusted when
+    `allow_single` (i.e. within one club, where 'Aarón' is not ambiguous).
+    """
+    ta, tb = normalize(a).split(), normalize(b).split()
+    if not ta or not tb:
+        return False
+    if len(ta) == 1 or len(tb) == 1:
+        short, long_ = (ta, tb) if len(ta) == 1 else (tb, ta)
+        return allow_single and short[0] in long_
+    return ta[-1] in tb or tb[-1] in ta or fuzz.ratio(ta[-1], tb[-1]) >= SURNAME_SPELLING
+
+
 @dataclass(frozen=True)
 class Stage:
     method: str
     min_score: float
     margin: float
+    allow_single: bool = False
 
 
 # Understat -> Transfermarkt, narrowest scope first. "team_surname" catches a
 # legal first name against a known one ('Julian Chabot' / 'Jeff Chabot').
 UNDERSTAT_STAGES = (
-    Stage("team", 75, 5),
+    Stage("team", 75, 5, allow_single=True),
     Stage("team_surname", 0, 0),
     Stage("competition", 88, 8),
     Stage("global", 95, 10),
 )
 SURNAME_SCORE = 70.0
+SURNAME_SPELLING = 85  # 'Waldschmidt'/'Waldschmidt' yes, 'Morcillo'/'Murillo' (80) no
 DOB_MIN_SCORE = 55
-DIRECT_STAGE = Stage("direct", 80, 5)
+DIRECT_STAGE = Stage("direct", 80, 5, allow_single=True)
 
 Links = dict[str, tuple[str, float, str]]  # source id -> (target id, score, method)
 
@@ -65,15 +84,16 @@ def _assign(candidates: list[tuple[float, str, str]], links: Links, taken: set[s
 
 
 def _best(name: str, pool: pd.DataFrame, stage: Stage) -> tuple[float, str] | None:
-    if pool.empty:
-        return None
     scores = sorted(
         (
             (name_score(name, n), pid)
             for pid, n in zip(pool.source_player_id, pool.name, strict=True)
+            if surnames_agree(name, n, stage.allow_single)
         ),
         reverse=True,
     )
+    if not scores:
+        return None
     top = scores[0]
     runner_up = scores[1][0] if len(scores) > 1 else 0.0
     if top[0] >= stage.min_score and top[0] - runner_up >= stage.margin:
