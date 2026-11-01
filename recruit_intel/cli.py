@@ -1,4 +1,4 @@
-"""Command-line entry point: `recruit ingest | match | squad | profile | gaps`."""
+"""Command-line entry point: `recruit ingest | match | squad | profile | gaps | search`."""
 
 import argparse
 import sys
@@ -15,6 +15,8 @@ from recruit_intel.features.positions import GROUPS
 from recruit_intel.identity import run as identity_run
 from recruit_intel.ingest import clubelo, fpl, transfermarkt, understat
 from recruit_intel.ingest.http import DAY, CachedClient
+from recruit_intel.search import rank as rank_mod
+from recruit_intel.search.pool import candidate_pool, league_strength
 
 
 class _Runner:
@@ -200,6 +202,69 @@ def cmd_gaps(args: argparse.Namespace) -> int:
     return 0
 
 
+def _search_slot(pool, slot, starter, club, args, roster_ids, strength) -> None:
+    role = load_roles()[slot.role]
+    pool_countries = args.leagues or club.recruitment.pool
+    competitions = [transfermarkt.LEAGUES[c][1] for c in pool_countries
+                    if c in transfermarkt.LEAGUES]  # fmt: skip
+    max_value = int(args.max_value * 1e6) if args.max_value else club.recruitment.max_value_eur
+    filters = rank_mod.Filters(
+        groups=slot.groups,
+        competitions=competitions,
+        max_age=args.max_age or club.recruitment.max_age,
+        max_value_eur=max_value,
+        contract_until=args.contract_until,
+        min_minutes=args.min_minutes or club.recruitment.min_minutes,
+        exclude=roster_ids,
+    )
+    window = club.season_start_year + 1
+    ranked = rank_mod.rank(pool, role, filters, strength, window, budget=max_value)
+
+    # The current starter, scored on the same basis (same window, same discounts).
+    base = None
+    if starter is not None:
+        row = pool[pool.player_id == starter.player_id]
+        fits = rank_mod.fit_scores(row, role, slot.groups, strength)
+        base = None if fits.empty else fits.fit.iloc[0]
+    base_txt = f"{starter.name} {base:.0f}" if starter and base is not None else "-"
+    print(f"\n{slot.key} · {role.label} · current starter: {base_txt}")
+    if ranked.empty:
+        print("  no candidates match the filters")
+        return
+    top = ranked.head(args.limit).copy()
+    top["vs_starter"] = (top.fit - base).round(0) if base is not None else None
+    top["value"] = (top.value_eur / 1e6).round(1)
+    cols = ["name", "club", "age", "value", "score", "vs_starter", "why"]
+    with pd.option_context("display.width", 250, "display.max_colwidth", 90):
+        print(top[cols].round(1).to_string(index=False, na_rep="-"))
+
+
+def cmd_search(args: argparse.Namespace) -> int:
+    club = load_club(args.club)
+    con = db.connect(args.db)
+    season = _latest_season(con)
+    report, chart = gaps.gap_report(con, club, season, args.formation)
+    by_slot = {d.slot.key: d for d in chart}
+
+    if args.slot:
+        if args.slot not in by_slot:
+            print(f"no slot {args.slot} in {args.formation or club.formation}: {list(by_slot)}")
+            return 1
+        slots = [args.slot]
+    else:
+        slots = list(gaps.priorities(report).slot.head(args.gaps))
+
+    seasons = list(range(season - args.seasons + 1, season + 1))
+    pool = candidate_pool(con, seasons)
+    roster_ids = set(profile.squad_roster(con, club).player_id)
+    print(f"{club.club} · market search · seasons {seasons[0]}-{_season_label(seasons[-1])}")
+    print("score = 65% fit (league-discounted) + 15% age + 10% value + 10% contract")
+    for key in slots:
+        depth = by_slot[key]
+        _search_slot(pool, depth.slot, depth.starter, club, args, roster_ids, league_strength())
+    return 0
+
+
 def cmd_profile(args: argparse.Namespace) -> int:
     club = load_club(args.club)
     con = db.connect(args.db)
@@ -284,6 +349,20 @@ def main(argv: list[str] | None = None) -> int:
     p_gaps.add_argument("--season", type=int)
     p_gaps.add_argument("--depth", action="store_true", help="also print the depth chart")
     p_gaps.set_defaults(func=cmd_gaps)
+
+    p_search = sub.add_parser("search", help="rank market candidates for a slot or the top gaps")
+    target = p_search.add_mutually_exclusive_group()
+    target.add_argument("--slot", help="formation slot, e.g. ST")
+    target.add_argument("--gaps", type=int, default=3, help="search the N top-priority slots")
+    p_search.add_argument("--formation")
+    p_search.add_argument("--leagues", nargs="+", metavar="COUNTRY", help="e.g. ENG ESP")
+    p_search.add_argument("--max-age", type=int, help="default: club recruitment.max_age")
+    p_search.add_argument("--max-value", type=float, help="EUR millions")
+    p_search.add_argument("--contract-until", type=int, help="contract ends by this year")
+    p_search.add_argument("--min-minutes", type=int, help="default: club recruitment.min_minutes")
+    p_search.add_argument("--seasons", type=int, default=2, help="season window for stats")
+    p_search.add_argument("--limit", type=int, default=8)
+    p_search.set_defaults(func=cmd_search)
 
     args = parser.parse_args(argv)
     return args.func(args)
