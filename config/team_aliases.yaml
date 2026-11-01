@@ -1,0 +1,10 @@
+# Transfermarkt club name -> other names the free sources use for it.
+# Only needed where fuzzy matching fails; most clubs map automatically.
+Manchester United: [Man Utd, Man United]
+Manchester City: [Man City]
+Tottenham Hotspur: [Spurs, Tottenham]
+Nottingham Forest: ["Nott'm Forest"]
+Wolverhampton Wanderers: [Wolves]
+Brighton & Hove Albion: [Brighton]
+Newcastle United: [Newcastle]
+Leeds United: [Leeds]
