@@ -101,6 +101,7 @@ ALTER TABLE source_players ADD COLUMN IF NOT EXISTS foot TEXT;
 ALTER TABLE source_players ADD COLUMN IF NOT EXISTS team_id TEXT;
 ALTER TABLE market ADD COLUMN IF NOT EXISTS joined_date DATE;
 ALTER TABLE player_source_ids ADD COLUMN IF NOT EXISTS method TEXT;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS detailed_position TEXT;
 """
 
 

@@ -13,7 +13,7 @@ def load_inputs(con: duckdb.DuckDBPyConnection) -> dict[str, pd.DataFrame]:
     tm = con.execute(
         """
         SELECT p.source_player_id, p.name, p.birth_date, p.nationality, p.position,
-               p.team_name, t.competition_id
+               p.detailed_position, p.team_name, t.competition_id
         FROM source_players p
         LEFT JOIN (SELECT source_team_id, arg_max(competition_id, season) AS competition_id
                    FROM teams WHERE source = 'transfermarkt' GROUP BY 1) t

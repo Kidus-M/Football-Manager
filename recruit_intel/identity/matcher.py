@@ -233,10 +233,14 @@ def build_identity(
         .merge(ids[["player_id", "source", "source_player_id"]], on=["source", "source_player_id"])
         .sort_values("rank")
     )
+    for col in ("nationality", "detailed_position"):  # only Transfermarkt has these
+        if col not in attrs:
+            attrs[col] = None
     players = attrs.groupby("player_id", as_index=False).agg(
         name=("name", "first"),
         birth_date=("birth_date", "first"),
         nationality=("nationality", "first"),
         position=("position", "first"),
+        detailed_position=("detailed_position", "first"),
     )
     return {"players": players, "player_source_ids": ids}
