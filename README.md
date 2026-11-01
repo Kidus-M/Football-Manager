@@ -19,6 +19,12 @@ py -3.12 -m venv .venv
 .venv/Scripts/recruit gaps --formation 3-4-2-1   # same squad, another shape
 .venv/Scripts/recruit search          # ranked market candidates for the top 3 gaps
 .venv/Scripts/recruit search --slot ST --max-value 50 --max-age 25 --upgrades
+.venv/Scripts/pip install -e ".[ml]"   # models (see pyproject for CPU-only torch)
+.venv/Scripts/recruit ingest --seasons 11   # history for training (Understat 2016-)
+.venv/Scripts/recruit train           # embeddings + league-translation model, with validation
+.venv/Scripts/recruit similar Mbeumo --younger --cheaper --not-ours
+.venv/Scripts/recruit roles           # playing roles discovered by clustering
+.venv/Scripts/recruit bargains --group CB --max-age 25
 .venv/Scripts/pytest
 ```
 
