@@ -14,7 +14,7 @@ import duckdb
 import pandas as pd
 
 from recruit_intel.analysis.lineup import SlotDepth, depth_chart
-from recruit_intel.analysis.profile import squad_percentiles
+from recruit_intel.analysis.profile import squad_percentiles, squad_roster
 from recruit_intel.analysis.squad import market_snapshot
 from recruit_intel.config import ClubConfig, lineup, load_roles
 
@@ -36,8 +36,11 @@ class Issue:
 def slot_issues(depth: SlotDepth, age: int | None, contract_year: int | None,
                 season_start: int) -> list[Issue]:  # fmt: skip
     starter = depth.starter
+    unrated = ", ".join(depth.unrated)
     if starter is None:
-        return [Issue("critical", "no squad player can be scored for this slot")]
+        if depth.unrated:
+            return [Issue("high", f"no rated player; unproven: {unrated}")]
+        return [Issue("critical", "no squad player can play this slot")]
     issues = []
     if starter.adjusted < CRITICAL_FIT:
         issues.append(Issue("critical", f"starter fit {starter.adjusted:.0f}: well below peers"))
@@ -46,7 +49,10 @@ def slot_issues(depth: SlotDepth, age: int | None, contract_year: int | None,
     elif starter.adjusted < UPGRADE_FIT:
         issues.append(Issue("medium", f"starter fit {starter.adjusted:.0f}: upgrade possible"))
     if not any(b.adjusted >= COVER_FIT for b in depth.backups):
-        issues.append(Issue("medium", "no adequate cover"))
+        if depth.unrated:
+            issues.append(Issue("low", f"cover unproven: {unrated} unrated"))
+        else:
+            issues.append(Issue("medium", "no adequate cover"))
     if contract_year is not None and contract_year <= season_start + 1:
         issues.append(Issue("medium", f"starter's contract ends {contract_year}"))
     if age is not None and age >= AGEING:
@@ -61,7 +67,8 @@ def gap_report(
     squad = squad_percentiles(con, club, season)
     slots = lineup(club, formation)
     roles = load_roles()
-    chart = depth_chart(squad, slots, roles, squad.attrs["min_minutes"])
+    roster = squad_roster(con, club)
+    chart = depth_chart(squad, slots, roles, squad.attrs["min_minutes"], roster)
 
     starter_ids = [d.starter.player_id for d in chart if d.starter]
     info = (

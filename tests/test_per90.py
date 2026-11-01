@@ -45,3 +45,19 @@ def test_each_source_uses_its_own_minutes_and_clubs_are_summed():
     assert row["tackles"] == pytest.approx(2.0)  # 20 / 900 * 90
     assert row["xa"] == pytest.approx(0.3)  # (1 + 2) / (450 + 450) * 90
     assert row["minutes"] == 900
+
+
+def test_goals_prevented_is_xg_conceded_minus_goals():
+    con = connect(":memory:")
+    upsert(con, "players", pd.DataFrame([
+        {"player_id": "tm-1", "name": "K", "position": "GK", "detailed_position": "Goalkeeper"},
+    ]))  # fmt: skip
+    upsert(con, "player_source_ids", pd.DataFrame([
+        {"player_id": "tm-1", "source": "fpl", "source_player_id": "1"},
+    ]))  # fmt: skip
+    upsert(con, "player_season_stats", pd.DataFrame([
+        _row("fpl", "1", "xg_conceded", 12.0, 900),
+        _row("fpl", "1", "goals_conceded", 9.0, 900),
+    ]))  # fmt: skip
+    row = per90_table(con, 2026).iloc[0]
+    assert row["goals_prevented"] == pytest.approx(0.3)  # (12 - 9) / 900 * 90

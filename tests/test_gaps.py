@@ -39,6 +39,19 @@ def test_cover_contract_and_age_flags():
     assert "is 33" in texts
 
 
+def test_unrated_cover_is_unproven_not_missing():
+    depth = _depth(80)
+    depth.unrated = ["Tom Heaton"]
+    issues = slot_issues(depth, 25, 2030, 2026)
+    assert [(i.severity, i.text) for i in issues] == [("low", "cover unproven: Tom Heaton unrated")]
+
+
+def test_slot_with_only_unrated_players_is_high_not_critical():
+    depth = _depth(None)
+    depth.unrated = ["Matthijs de Ligt"]
+    assert severities(slot_issues(depth, None, None, 2026)) == ["high"]
+
+
 def test_priorities_orders_by_severity_then_fit():
     report = pd.DataFrame(
         [

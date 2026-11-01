@@ -93,8 +93,11 @@ def depth_chart(
         unrated = (
             []
             if roster is None
-            else [r.name for r in roster.itertuples()
-                  if r.group in s.groups and r.player_id not in rated]  # fmt: skip
+            else [
+                r.name
+                for r in roster.itertuples()
+                if r.group in s.groups and r.player_id not in rated
+            ]  # fmt: skip
         )
         chart.append(
             SlotDepth(
