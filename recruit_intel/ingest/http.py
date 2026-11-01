@@ -21,6 +21,9 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 )
 DAY = 24 * 3600
+RETRIES = 2
+BACKOFF_S = 5.0
+TRANSIENT = (httpx.TimeoutException, httpx.RemoteProtocolError, httpx.ConnectError)
 
 
 class CachedClient:
@@ -59,8 +62,16 @@ class CachedClient:
         path = self._path(url, params)
         if path.exists() and time.time() - path.stat().st_mtime < self.ttl:
             return path.read_text(encoding="utf-8")
-        self._throttle(url)
-        resp = self._client.get(url, params=params, **kw)
+        for attempt in range(RETRIES + 1):
+            self._throttle(url)
+            try:
+                resp = self._client.get(url, params=params, **kw)
+                break
+            except TRANSIENT:
+                # A slow or dropped connection shouldn't end a long scrape.
+                if attempt == RETRIES:
+                    raise
+                time.sleep(BACKOFF_S * (attempt + 1))
         resp.raise_for_status()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(resp.text, encoding="utf-8")
