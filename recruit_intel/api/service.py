@@ -18,6 +18,7 @@ import pandas as pd
 from recruit_intel import db
 from recruit_intel.analysis import gaps, profile, tactics
 from recruit_intel.config import ClubConfig, lineup, load_club, load_formations, load_roles
+from recruit_intel.features.metrics import METRICS
 from recruit_intel.features.positions import GROUPS
 from recruit_intel.search import rank as rank_mod
 from recruit_intel.search.pool import candidate_pool, league_strength
@@ -186,6 +187,9 @@ def player(player_id: str) -> dict | None:
         "percentiles": [
             {"metric": k, "label": profile.label(k), "value": clean(row.get(k))} for k in metrics
         ],  # fmt: skip
+        # Every metric, so players from different position groups can be
+        # compared on one radar.
+        "all_percentiles": {k: clean(row.get(k)) for k in METRICS if k in row.index},
         "strengths": [profile.label(k) for k in strengths],
         "weaknesses": [profile.label(k) for k in weaknesses],
         "roles": [

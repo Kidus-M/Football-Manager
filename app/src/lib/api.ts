@@ -62,6 +62,7 @@ export type Player = {
   value_eur: number | null;
   contract_year: number | null;
   percentiles: { metric: string; label: string; value: number | null }[];
+  all_percentiles: Record<string, number | null>;
   strengths: string[];
   weaknesses: string[];
   roles: { role: string; fit: number }[];
