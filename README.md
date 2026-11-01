@@ -13,6 +13,8 @@ py -3.12 -m venv .venv
 .venv/Scripts/recruit ingest --market-pool ENG   # + every Transfermarkt squad in those leagues (slow first run)
 .venv/Scripts/recruit match           # rebuild canonical player ids (ingest also runs this)
 .venv/Scripts/recruit squad           # current squad: value, contract, per-90 stats
+.venv/Scripts/recruit profile         # squad strengths, weaknesses and best role (percentiles)
+.venv/Scripts/recruit profile Mainoo Tielemans --radar data/radars/cm.svg   # compare + SVG radar
 .venv/Scripts/pytest
 ```
 

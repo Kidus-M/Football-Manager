@@ -42,7 +42,8 @@ def render(
     n = len(metrics)
     colours = (accent, *COMPARE_COLOURS)
     parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {SIZE} {SIZE + 70}" '
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{SIZE}" height="{SIZE + 70}" '
+        f'viewBox="0 0 {SIZE} {SIZE + 70}" '
         f'font-family="Inter, Segoe UI, sans-serif">',
         f'<rect width="100%" height="100%" fill="{BG}"/>',
         f'<text x="24" y="38" fill="{TEXT}" font-size="22" font-weight="700">'
