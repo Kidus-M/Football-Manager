@@ -68,6 +68,17 @@ def test_why_explains_the_rank():
     assert "Ligue 1" in why and "age 25" in why and "contract 2029" in why
 
 
+def test_system_fit_breaks_a_tie_and_shows_in_why():
+    pool = _pool(
+        ("a", "A", "ST", EPL, 3000, 25, 50e6, 2029, 90),
+        ("b", "B", "ST", EPL, 3000, 25, 50e6, 2029, 90),
+    )
+    fits = pd.Series({"a": -10.0, "b": 12.0})
+    ranked = rank(pool, ROLE, Filters(groups=["ST"]), STRENGTH, 2027, system_fit=fits)
+    assert list(ranked.player_id) == ["b", "a"]
+    assert "system +12%" in ranked.why.iloc[0]
+
+
 @pytest.mark.parametrize("age,expected", [(24, 100), (29, 50), (34, 10), (18, 75)])
 def test_age_score(age, expected):
     assert age_score(age) == expected

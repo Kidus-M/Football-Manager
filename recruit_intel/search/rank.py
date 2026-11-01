@@ -9,6 +9,8 @@ row says what drove it, so a rank is never a black-box verdict:
 - age: resale and peak-years profile, best at 23-26
 - value: cheaper is better (relative to the budget when there is one)
 - contract: fewer years left means a lower fee
+- system (when the player-team fit model is trained and validated): the
+  projected change in his output in the club's current style, at 5%
 """
 
 from dataclasses import dataclass, field
@@ -20,6 +22,9 @@ from recruit_intel.analysis.profile import role_fit
 from recruit_intel.config import Role
 
 WEIGHTS = {"fit": 0.65, "age": 0.15, "value": 0.10, "contract": 0.10}
+# Player-team fit only beat a strength-only model by 1-8% on held-out moves,
+# so it nudges the ranking rather than driving it.
+SYSTEM_WEIGHT = 0.05
 RELIABLE_MINUTES = 1800  # two-season window: about 20 full matches
 
 
@@ -97,7 +102,11 @@ def rank(
     strength: dict[str, float],
     window_year: int,
     budget: int | None = None,
+    system_fit: pd.Series | None = None,
 ) -> pd.DataFrame:
+    """`system_fit`: optional % change in output at the club (player-team fit
+    model) by player_id. When given it takes SYSTEM_WEIGHT from role fit;
+    players without one score neutral (0%)."""
     cands = apply_filters(pool, filters)
     cands = cands.merge(fit_scores(cands, role, filters.groups, strength), on="player_id")
     if cands.empty:
@@ -105,12 +114,20 @@ def rank(
     cands["age_score"] = cands.age.map(age_score)
     cands["value_score"] = value_scores(cands.value_eur, budget).to_numpy()
     cands["contract_score"] = cands.contract_year.map(lambda y: contract_score(y, window_year))
+    weights = dict(WEIGHTS)
+    if system_fit is not None:
+        cands["system_fit"] = cands.player_id.map(system_fit)
+        # +/-20% projected change spans the scale; most players sit near 50.
+        cands["system_score"] = (50 + 2.5 * cands.system_fit.fillna(0)).clip(0, 100)
+        weights["fit"] -= SYSTEM_WEIGHT
     cands["score"] = (
-        WEIGHTS["fit"] * cands.fit
-        + WEIGHTS["age"] * cands.age_score
-        + WEIGHTS["value"] * cands.value_score
-        + WEIGHTS["contract"] * cands.contract_score
+        weights["fit"] * cands.fit
+        + weights["age"] * cands.age_score
+        + weights["value"] * cands.value_score
+        + weights["contract"] * cands.contract_score
     )
+    if system_fit is not None:
+        cands["score"] += SYSTEM_WEIGHT * cands.system_score
     cands["why"] = [_why(r) for r in cands.itertuples()]
     return cands.sort_values("score", ascending=False).reset_index(drop=True)
 
@@ -126,4 +143,6 @@ def _why(r) -> str:
         parts.append(f"EUR {r.value_eur / 1e6:.1f}M")
     if pd.notna(r.contract_year):
         parts.append(f"contract {r.contract_year}")
+    if pd.notna(getattr(r, "system_fit", None)):
+        parts.append(f"system {r.system_fit:+.0f}%")
     return ", ".join(parts)
