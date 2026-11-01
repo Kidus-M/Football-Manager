@@ -40,5 +40,7 @@ METRICS: dict[str, Metric] = {
         Metric("defensive_contribution", "Defensive contribution", "fpl"),
         Metric("clean_sheets", "Clean sheets", "fpl"),
         Metric("starts", "Starts", "fpl"),
+        # Derived in features/per90.py from the metrics above
+        Metric("goals_prevented", "Goals prevented (xG conceded - goals)", "derived"),
     ]
 }

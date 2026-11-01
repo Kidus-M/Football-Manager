@@ -11,7 +11,7 @@ GROUPS: dict[str, dict] = {
         "label": "Goalkeepers",
         "detailed": ["Goalkeeper"],
         "broad": "GK",
-        "metrics": ["saves", "goals_conceded", "xg_conceded", "xg_buildup", "recoveries"],
+        "metrics": ["goals_prevented", "saves", "goals_conceded", "xg_buildup", "recoveries"],
     },
     "CB": {
         "label": "Centre-backs",

@@ -11,16 +11,16 @@ sweeper_keeper:
   label: Sweeper keeper
   groups: [GK]
   weights:
-    saves: 0.35
-    goals_conceded: 0.25
+    goals_prevented: 0.45
     xg_buildup: 0.40
+    recoveries: 0.15
 
 shot_stopper:
   label: Shot stopper
   groups: [GK]
   weights:
-    saves: 0.60
-    goals_conceded: 0.40
+    goals_prevented: 0.80
+    saves: 0.20
 
 ball_playing_cb:
   label: Ball-playing centre-back

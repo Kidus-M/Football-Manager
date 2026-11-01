@@ -43,6 +43,10 @@ def per90_table(con: duckdb.DuckDBPyConnection, season: int) -> pd.DataFrame:
     long = long[long.source == long.metric.map(lambda m: METRICS[m].source)]
     wide = long.pivot_table(index=["player_id", "competition_id"], columns="metric", values="value")
     wide["minutes"] = minutes.groupby(level=["player_id", "competition_id"]).max()
+    if {"xg_conceded", "goals_conceded"} <= set(wide.columns):
+        # A keeper's own contribution, unlike saves (which mostly count shots
+        # faced). Pre-shot xG, so it's a rough proxy for goals prevented.
+        wide["goals_prevented"] = wide["xg_conceded"] - wide["goals_conceded"]
     wide = wide.reset_index()
 
     players = con.execute(
