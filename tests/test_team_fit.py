@@ -38,11 +38,12 @@ def test_style_model_beats_ablation_when_style_matters():
     assert allp["with style"] < 0.6 * allp["no change"]
 
 
-def test_fit_score_prefers_the_pressing_team():
+def test_fit_score_recovers_the_planted_lift():
     pairs = _pairs()
     model = train(pairs)
-    player = pairs.iloc[[0, 0]].copy()
-    player["dest_ppda"] = [-1.5, 1.5]  # presses hard vs sits off
-    hi, lo = model.fit_score(player)
-    assert hi > lo + 10
+    sample = pairs.sample(200, random_state=1)
+    press = model.fit_score(sample.assign(dest_ppda=-1.5)).mean()
+    sit = model.fit_score(sample.assign(dest_ppda=1.5)).mean()
+    assert press == pytest.approx(25, abs=7)  # planted: +25% at pressing teams
+    assert sit == pytest.approx(0, abs=5)
     assert isinstance(model, FitModel)

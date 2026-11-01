@@ -134,9 +134,15 @@ class FitModel:
             return self.net(*self._tensors(df)).numpy()
 
     def fit_score(self, df: pd.DataFrame) -> np.ndarray:
-        """Predicted % change in attacking involvement at the destination."""
+        """Predicted % change in attacking involvement at the destination.
+
+        Deltas are in log1p space, so they're mapped back to per-90 values
+        before comparing (exp(delta) - 1 would understate small rates).
+        """
         idx = [EMBED_FEATURES.index(f) for f in FIT_FEATURES]
-        return (np.exp(self.predict_delta(df)[:, idx].mean(axis=1)) - 1) * 100
+        now = transform(df)[:, idx]
+        nxt = np.expm1(now + self.predict_delta(df)[:, idx])
+        return (nxt.sum(axis=1) / np.expm1(now).sum(axis=1) - 1) * 100
 
 
 def _targets(df: pd.DataFrame) -> np.ndarray:
