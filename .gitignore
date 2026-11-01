@@ -19,3 +19,8 @@ node_modules/
 Thumbs.db
 .vscode/
 .idea/
+
+# Secrets (API keys)
+.env
+.env.*
+!.env.example

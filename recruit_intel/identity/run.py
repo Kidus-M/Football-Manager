@@ -47,7 +47,14 @@ def load_inputs(con: duckdb.DuckDBPyConnection) -> dict[str, pd.DataFrame]:
     us["team_name"] = us["team_name"].str.split(",").str[-1]
     for df in (tm, fpl):
         df["birth_date"] = pd.to_datetime(df["birth_date"]).dt.date
-    return {"tm": tm, "fpl": fpl, "us": us}
+    af = con.execute(
+        """
+        SELECT source_player_id, name, birth_date, position, team_name
+        FROM source_players WHERE source = 'apifootball'
+        """
+    ).df()
+    af["birth_date"] = pd.to_datetime(af["birth_date"]).dt.date
+    return {"tm": tm, "fpl": fpl, "us": us, "af": af}
 
 
 def report(ids: pd.DataFrame, inputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -60,6 +67,7 @@ def report(ids: pd.DataFrame, inputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
     rows = []
     for label, pop, source, pool in (
         ("FPL players", inputs["fpl"], "fpl", linked),
+        ("API-Football players", inputs["af"], "apifootball", linked),
         ("Understat players, all seasons", us, "understat", linked),
         ("Understat top-5 this season -> Transfermarkt", target, "understat", to_tm),
     ):
@@ -72,7 +80,7 @@ def report(ids: pd.DataFrame, inputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
 def rebuild(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     inputs = load_inputs(con)
-    tables = build_identity(inputs["tm"], inputs["fpl"], inputs["us"])
+    tables = build_identity(inputs["tm"], inputs["fpl"], inputs["us"], inputs["af"])
     for table in ("player_source_ids", "players"):
         con.execute(f"DELETE FROM {table}")
         db.upsert(con, table, tables[table])

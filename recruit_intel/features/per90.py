@@ -47,7 +47,17 @@ def per90_table(con: duckdb.DuckDBPyConnection, season: int | list[int]) -> pd.D
     # Several sources publish some metrics (FPL and Understat both have xG);
     # each metric is taken only from the source the catalogue assigns it.
     long = per90.stack().rename("value").reset_index()
-    long = long[long.source == long.metric.map(lambda m: METRICS[m].source)]
+    # Its fallback sources fill in only for players the main source lacks.
+    rank = [
+        METRICS[m].sources.index(s) if s in METRICS[m].sources else -1
+        for m, s in zip(long.metric, long.source, strict=True)
+    ]
+    long = long.assign(_rank=rank)
+    long = (
+        long[long._rank >= 0]
+        .sort_values("_rank")
+        .drop_duplicates(["player_id", "competition_id", "metric"])
+    )
     wide = long.pivot_table(index=["player_id", "competition_id"], columns="metric", values="value")
     wide["minutes"] = minutes.groupby(level=["player_id", "competition_id"]).max()
     if {"xg_conceded", "goals_conceded"} <= set(wide.columns):

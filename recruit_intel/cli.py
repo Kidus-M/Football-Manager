@@ -14,7 +14,7 @@ from recruit_intel.analysis.squad import current_squad
 from recruit_intel.config import load_club, load_roles
 from recruit_intel.features.positions import GROUPS
 from recruit_intel.identity import run as identity_run
-from recruit_intel.ingest import clubelo, fpl, transfermarkt, understat
+from recruit_intel.ingest import apifootball, clubelo, fpl, transfermarkt, understat
 from recruit_intel.ingest.http import DAY, CachedClient
 from recruit_intel.search import rank as rank_mod
 from recruit_intel.search.pool import candidate_pool, league_strength
@@ -122,9 +122,34 @@ def cmd_ingest(args: argparse.Namespace) -> int:
                     },
                 )
 
+    if args.apifootball is not None:
+        _ingest_apifootball(run, args.apifootball or club.recruitment.pool, current)
+
     print(f"{run.ok}/{run.total} sources loaded into {args.db}")
     _print_match_report(con)
     return 0 if run.ok else 1
+
+
+def _ingest_apifootball(run: _Runner, countries: list[str], season: int) -> None:
+    """Defensive stats for every pool league. Stops at the daily quota; cached
+    pages make the next run continue where this one stopped."""
+    key = apifootball.api_key()
+    if not key:
+        print("  ✗ apifootball: no API_FOOTBALL_KEY in the environment or .env")
+        return
+    with apifootball.make_client(key) as client:
+        for country in countries:
+            if country not in apifootball.LEAGUES:
+                continue
+            # The runner reports any failure (QuotaExhausted included) and
+            # returns None; stop there so no more requests are spent.
+            fetched = run(
+                f"apifootball {country} {season}",
+                lambda c=country: apifootball.ingest_league(client, c, season),
+            )
+            if fetched is None:
+                print("  ↻ apifootball stopped; fetched pages are cached, rerun to continue")
+                return
 
 
 def _print_match_report(con) -> None:
@@ -455,6 +480,13 @@ def main(argv: list[str] | None = None) -> int:
         metavar="COUNTRY",
         help="also scrape Transfermarkt squads for these countries (no value: the club's "
         "whole recruitment pool). Slow on first run: ~20 pages per league at 4s each",
+    )
+    p_ingest.add_argument(
+        "--apifootball",
+        nargs="*",
+        metavar="COUNTRY",
+        help="also fetch API-Football defensive stats (needs API_FOOTBALL_KEY; no value: "
+        "the club's recruitment pool). Free plan: ~2 days for five leagues; rerun daily",
     )
     p_ingest.add_argument(
         "--managers",

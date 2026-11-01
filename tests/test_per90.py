@@ -47,6 +47,27 @@ def test_each_source_uses_its_own_minutes_and_clubs_are_summed():
     assert row["minutes"] == 900
 
 
+def test_tackles_prefer_apifootball_and_fall_back_to_fpl():
+    con = connect(":memory:")
+    upsert(con, "players", pd.DataFrame([
+        {"player_id": "tm-1", "name": "A", "position": "DEF", "detailed_position": "Centre-Back"},
+        {"player_id": "tm-2", "name": "B", "position": "DEF", "detailed_position": "Centre-Back"},
+    ]))  # fmt: skip
+    upsert(con, "player_source_ids", pd.DataFrame([
+        {"player_id": "tm-1", "source": "fpl", "source_player_id": "1"},
+        {"player_id": "tm-1", "source": "apifootball", "source_player_id": "9"},
+        {"player_id": "tm-2", "source": "fpl", "source_player_id": "2"},
+    ]))  # fmt: skip
+    upsert(con, "player_season_stats", pd.DataFrame([
+        _row("fpl", "1", "tackles", 10, 900),
+        _row("apifootball", "9", "tackles", 30, 900),
+        _row("fpl", "2", "tackles", 20, 900),
+    ]))  # fmt: skip
+    t = per90_table(con, 2026).set_index("player_id").tackles
+    assert t["tm-1"] == pytest.approx(3.0)  # API-Football wins
+    assert t["tm-2"] == pytest.approx(2.0)  # FPL fills the gap
+
+
 def test_multiple_seasons_pool_totals_and_minutes():
     con = connect(":memory:")
     upsert(con, "players", pd.DataFrame([

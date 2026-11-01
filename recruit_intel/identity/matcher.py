@@ -22,7 +22,7 @@ from rapidfuzz import fuzz
 from recruit_intel.identity.names import normalize
 from recruit_intel.identity.teams import match_teams
 
-PREFIX = {"transfermarkt": "tm", "fpl": "fpl", "understat": "us"}
+PREFIX = {"transfermarkt": "tm", "fpl": "fpl", "understat": "us", "apifootball": "af"}
 EPL = "ENG-Premier League"
 
 
@@ -182,15 +182,23 @@ def match_direct(fpl: pd.DataFrame, us: pd.DataFrame, fpl_clubs: dict, us_clubs:
 
 
 def build_identity(
-    tm: pd.DataFrame, fpl: pd.DataFrame, us: pd.DataFrame
+    tm: pd.DataFrame,
+    fpl: pd.DataFrame,
+    us: pd.DataFrame,
+    af: pd.DataFrame | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Rows for `players` and `player_source_ids`.
 
     tm:  source_player_id, name, birth_date, nationality, position, team_name, competition_id
     fpl: source_player_id, name, birth_date, position, team_name
     us:  source_player_id, name, position, team_name, competition_id
+    af:  source_player_id, name, birth_date, position, team_name (API-Football;
+         optional, matched by birth date like FPL)
     """
+    if af is None:
+        af = fpl.iloc[:0]
     fpl_links = match_by_birth_date(fpl, tm)
+    af_links = match_by_birth_date(af, tm)
     team_map = understat_team_map(us, tm)
     us_links = match_understat(us, tm, team_map)
 
@@ -203,7 +211,7 @@ def build_identity(
     )
 
     rows = [("tm-" + pid, "transfermarkt", pid, 100.0, "anchor") for pid in tm.source_player_id]
-    for source, links in (("fpl", fpl_links), ("understat", us_links)):
+    for source, links in (("fpl", fpl_links), ("understat", us_links), ("apifootball", af_links)):
         for src_id, (tm_id, score, method) in links.items():
             rows.append(("tm-" + tm_id, source, src_id, score, method))
     for us_id, (fpl_id, score, method) in direct.items():
@@ -211,7 +219,7 @@ def build_identity(
         rows.append(("fpl-" + fpl_id, "understat", us_id, score, method))
 
     linked = {(source, pid) for _, source, pid, _, _ in rows}
-    for source, df in (("fpl", fpl), ("understat", us)):
+    for source, df in (("fpl", fpl), ("understat", us), ("apifootball", af)):
         for pid in df.source_player_id:
             if (source, pid) not in linked:
                 rows.append((f"{PREFIX[source]}-{pid}", source, pid, None, "unmatched"))
@@ -227,6 +235,7 @@ def build_identity(
                 tm.assign(source="transfermarkt", rank=0),
                 fpl.assign(source="fpl", rank=1),
                 us.assign(source="understat", rank=2),
+                af.assign(source="apifootball", rank=3),
             ],
             ignore_index=True,
         )
