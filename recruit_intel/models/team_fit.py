@@ -76,15 +76,20 @@ def team_context(con: duckdb.DuckDBPyConnection, style: StyleModel) -> pd.DataFr
     return out
 
 
+def _prefixed(teams: pd.DataFrame, prefix: str) -> pd.DataFrame:
+    """Team context columns renamed with a prefix: team style has npxg/npxga
+    too, which must never collide with the player's own per-90 columns."""
+    cols = {c: f"{prefix}{c}" for c in STYLE_FEATURES} | {"xpts_pm": f"{prefix}strength"}
+    return teams.rename(columns=cols)
+
+
 def make_pairs(players: pd.DataFrame, teams: pd.DataFrame) -> pd.DataFrame:
     """Season t at one team joined to season t+1, with both teams' context."""
     nxt = players.assign(season=players.season - 1)
     pairs = players.merge(nxt, on=["source_player_id", "season"], suffixes=("", "_next"))
-    ctx = teams.rename(columns={"xpts_pm": "strength"})
-    pairs = pairs.merge(ctx, on=["team_id", "season"])
-    dest = ctx.rename(columns={c: f"dest_{c}" for c in ["strength", *STYLE_FEATURES]})
-    dest = dest.assign(season=dest.season - 1).rename(columns={"team_id": "team_id_next"})
-    pairs = pairs.merge(dest, on=["team_id_next", "season"])
+    pairs = pairs.merge(_prefixed(teams, "ctx_"), on=["team_id", "season"])
+    dest = _prefixed(teams, "dest_").rename(columns={"team_id": "team_id_next"})
+    pairs = pairs.merge(dest.assign(season=dest.season - 1), on=["team_id_next", "season"])
     pairs["moved"] = pairs.team_id != pairs.team_id_next
     return pairs.reset_index(drop=True)
 
@@ -101,6 +106,7 @@ class TwoTower(nn.Module):
         return self.head(torch.cat([a, b, a * b], dim=1))
 
 
+CTX_COLS = ["ctx_strength", *[f"ctx_{f}" for f in STYLE_FEATURES]]
 TEAM_COLS = ["dest_strength", *[f"dest_{f}" for f in STYLE_FEATURES]]
 
 
@@ -115,7 +121,7 @@ class FitModel:
 
     def _player_x(self, df: pd.DataFrame) -> np.ndarray:
         age = df["age"].fillna(26.0).to_numpy(float)[:, None]
-        ctx = df[["strength", *STYLE_FEATURES]].to_numpy(float)
+        ctx = df[CTX_COLS].to_numpy(float)
         return np.hstack([transform(df), age, ctx])
 
     def _team_x(self, df: pd.DataFrame) -> np.ndarray:

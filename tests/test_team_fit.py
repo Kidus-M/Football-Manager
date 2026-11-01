@@ -19,13 +19,13 @@ def _pairs(n=3000, seed=4):
         press = rng.normal()
         lift = 1.25 if press < -0.5 else 1.0
         row = {"source_player_id": str(i), "season": 2018 + i % 6, "age": 25.0,
-               "strength": rng.uniform(1, 2), "dest_strength": rng.uniform(1, 2),
+               "ctx_strength": rng.uniform(1, 2), "dest_strength": rng.uniform(1, 2),
                "moved": bool(i % 2)}  # fmt: skip
         for f, scale in zip(EMBED_FEATURES, [0.3, 0.2, 2.0, 1.5, 0.6, 0.3], strict=True):
             row[f] = base * scale
             row[f"{f}_next"] = base * scale * lift * rng.normal(1, 0.05)
         for f in STYLE_FEATURES:
-            row[f] = rng.normal()
+            row[f"ctx_{f}"] = rng.normal()
             row[f"dest_{f}"] = press if f == "ppda" else rng.normal()
         rows.append(row)
     return pd.DataFrame(rows)
