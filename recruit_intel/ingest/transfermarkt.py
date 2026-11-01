@@ -138,6 +138,46 @@ def parse_squad(html: str, snapshot: date) -> dict[str, pd.DataFrame]:
     return {"source_players": pd.DataFrame(players), "market": pd.DataFrame(market)}
 
 
+def parse_managers(html: str, club_id: str | int, today: date) -> pd.DataFrame:
+    """A club's manager history -> manager_spells rows.
+
+    For the current manager, Transfermarkt's "end" is his contract end (a
+    future date); it is stored as NULL: the spell is ongoing.
+    """
+    rows = []
+    for row in _rows(BeautifulSoup(html, "lxml")):
+        tds = row.find_all("td", recursive=False)
+        link = row.select_one("td.hauptlink a[href*='/trainer/']")
+        if link is None or len(tds) < 7:
+            continue
+        appointed = parse_date(tds[2].get_text(strip=True))
+        ended = parse_date(tds[3].get_text(strip=True))
+        if appointed is None:
+            continue
+        ppg = tds[6].get_text(strip=True).replace(",", ".")
+        rows.append(
+            {
+                "source": SOURCE,
+                "club_id": str(club_id),
+                "manager_id": _id_from_href(link["href"], "trainer"),
+                "name": link.get_text(strip=True),
+                "appointed": appointed,
+                "ended": ended if ended and ended <= today else None,
+                "matches": int(tds[5].get_text(strip=True) or 0),
+                "ppg": float(ppg) if re.fullmatch(r"[\d.]+", ppg) else None,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def managers_url(club_id: str | int) -> str:
+    return f"{BASE}/x/mitarbeiterhistorie/verein/{club_id}"
+
+
+def fetch_managers(client: CachedClient, club_id: str | int) -> pd.DataFrame:
+    return parse_managers(client.get_text(managers_url(club_id)), club_id, date.today())
+
+
 def make_client(**kw) -> CachedClient:
     # TM is the most block-happy source: keep well under one request per 3s.
     return CachedClient(SOURCE, min_interval=kw.pop("min_interval", 4.0), **kw)

@@ -21,6 +21,8 @@ LEAGUES = {
     "RFPL": ("RUS", "RUS-Premier League"),
 }
 
+LEAGUES_BY_COUNTRY = {country: slug for slug, (country, _) in LEAGUES.items() if country != "RUS"}
+
 POSITIONS = {"GK": "GK", "D": "DEF", "M": "MID", "F": "FWD"}
 
 METRIC_FIELDS = {

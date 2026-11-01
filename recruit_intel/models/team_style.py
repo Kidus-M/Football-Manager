@@ -106,13 +106,15 @@ class StyleModel:
             return self.encoder.encoder(torch.from_numpy(self.adjusted(df))).numpy()
 
     def traits(self, df: pd.DataFrame, max_traits: int = 3) -> list[str]:
-        out = []
-        for z in self.adjusted(df):
-            order = np.argsort(-np.abs(z))[:max_traits]
-            labels = [TRAITS[STYLE_FEATURES[i]][0 if z[i] > 0 else 1]
-                      for i in order if abs(z[i]) >= TRAIT_Z]  # fmt: skip
-            out.append(", ".join(labels) or "typical for its level")
-        return out
+        return [describe(z, max_traits) for z in self.adjusted(df)]
+
+
+def describe(z: np.ndarray, max_traits: int = 3, threshold: float = TRAIT_Z) -> str:
+    """Strongest strength-adjusted traits of one style vector, as words."""
+    order = np.argsort(-np.abs(z))[:max_traits]
+    labels = [TRAITS[STYLE_FEATURES[i]][0 if z[i] > 0 else 1]
+              for i in order if abs(z[i]) >= threshold]  # fmt: skip
+    return ", ".join(labels) or "typical for its level"
 
 
 def fit(df: pd.DataFrame, epochs: int = 400) -> tuple[StyleModel, dict]:

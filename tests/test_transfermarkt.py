@@ -67,6 +67,21 @@ def test_squad_rows_fit_schema():
         assert upsert(con, table, df) == 4
 
 
+def test_parse_managers_fixture():
+    html = (FIXTURES / "tm_managers.html").read_text(encoding="utf-8")
+    spells = tm.parse_managers(html, 985, today=date(2026, 11, 1))
+    current = spells.iloc[0]
+    assert (current["name"], current.manager_id) == ("Michael Carrick", "65647")
+    assert current.appointed == date(2026, 5, 22) and current.ended is None  # contract end hidden
+    interim = spells.iloc[1]
+    assert (interim.appointed, interim.ended, interim.matches) == (
+        date(2026, 1, 13),
+        date(2026, 5, 22),
+        16,
+    )
+    assert upsert(connect(":memory:"), "manager_spells", spells) == len(spells)
+
+
 def test_block_page_raises():
     with pytest.raises(ValueError, match="table.items"):
         tm.parse_squad("<html><h1>Just a moment...</h1></html>", date(2026, 11, 1))

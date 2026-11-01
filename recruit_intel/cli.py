@@ -95,6 +95,32 @@ def cmd_ingest(args: argparse.Namespace) -> int:
                         ),
                     )
 
+        if args.managers:
+            # Every club that played in a top-five league during the window
+            # (relegated ones too), then each club's manager history. Past
+            # league tables never change, so they're cached for a year.
+            club_ids: set[str] = set()
+            past = transfermarkt.make_client(ttl=365 * DAY)
+            for season in seasons:
+                for country in understat.LEAGUES_BY_COUNTRY:
+                    client = tm_client if season == current else past
+                    listing = run(
+                        f"transfermarkt {country} clubs {season}",
+                        lambda c=country, s=season, cl=client: {
+                            "teams": transfermarkt.fetch_league_clubs(cl, c, s)
+                        },
+                    )
+                    if listing is not None:
+                        club_ids |= set(listing["teams"].source_team_id)
+            past.close()
+            for club_id in sorted(club_ids):
+                run(
+                    f"transfermarkt managers {club_id}",
+                    lambda c=club_id: {
+                        "manager_spells": transfermarkt.fetch_managers(tm_client, c)
+                    },
+                )
+
     print(f"{run.ok}/{run.total} sources loaded into {args.db}")
     _print_match_report(con)
     return 0 if run.ok else 1
@@ -325,6 +351,12 @@ def main(argv: list[str] | None = None) -> int:
         metavar="COUNTRY",
         help="also scrape Transfermarkt squads for these countries (no value: the club's "
         "whole recruitment pool). Slow on first run: ~20 pages per league at 4s each",
+    )
+    p_ingest.add_argument(
+        "--managers",
+        action="store_true",
+        help="also scrape manager histories of every top-five-league club in the season "
+        "window (slow on first run: ~200 pages)",
     )
     p_ingest.set_defaults(func=cmd_ingest)
 

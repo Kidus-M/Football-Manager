@@ -92,6 +92,18 @@ CREATE TABLE IF NOT EXISTS team_matches (
     PRIMARY KEY (source, team_id, match_date)
 );
 
+CREATE TABLE IF NOT EXISTS manager_spells (
+    source TEXT NOT NULL,
+    club_id TEXT NOT NULL,                 -- Transfermarkt club id
+    manager_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    appointed DATE NOT NULL,
+    ended DATE,                            -- NULL while the spell is ongoing
+    matches INTEGER,
+    ppg DOUBLE,
+    PRIMARY KEY (source, club_id, manager_id, appointed)
+);
+
 CREATE TABLE IF NOT EXISTS players (
     player_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,

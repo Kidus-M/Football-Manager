@@ -70,6 +70,41 @@ def _find_team(seasons: pd.DataFrame, query: str) -> pd.DataFrame:
     return exact if not exact.empty else hits
 
 
+def cmd_manager(args: argparse.Namespace) -> int:
+    from recruit_intel.analysis.profile import find_players
+    from recruit_intel.models import managers, team_style
+
+    con = db.connect(args.db)
+    st = managers.stints(con, team_style.load())
+    profs = managers.profiles(st)
+    hits = find_players(profs.rename(columns={"manager": "name"}), args.manager)
+    if len(hits) != 1:
+        print(f"'{args.manager}' matched {len(hits)} managers: "
+              f"{', '.join(hits.name.head(8)) or 'none'}")  # fmt: skip
+        return 1
+    prof = profs[profs.manager_id == hits.manager_id.iloc[0]].iloc[0]
+    mine = st[st.manager_id == prof.manager_id].copy()
+    mine["traits"] = [team_style.describe(r) for r in mine[team_style.STYLE_FEATURES].to_numpy()]
+    mine["season_"] = mine.season.map(lambda s: f"{s}-{(s + 1) % 100:02d}")
+    mine["strength"] = mine.xpts_pm.round(2)
+    print(f"{prof.manager}: {prof.matches} top-five-league matches at {prof.clubs} club(s) "
+          f"since {mine.season_.iloc[0]}\n")  # fmt: skip
+    with pd.option_context(*[kv for pair in WIDE.items() for kv in pair]):
+        print(mine[["team_name", "season_", "matches", "strength", "traits"]]
+              .to_string(index=False))  # fmt: skip
+    print(f"\nSignature (match-weighted, strength-adjusted): {managers.signature(prof)}")
+    if prof.clubs == 1:
+        print("  (one club only: can't yet tell his style from that squad's)")
+
+    near = managers.similar_managers(profs, prof.manager_id, k=args.limit)
+    near = near.assign(signature=[managers.signature(r) for _, r in near.iterrows()])
+    print("\nManagers with the most similar profile (38+ matches):\n")
+    with pd.option_context(*[kv for pair in WIDE.items() for kv in pair]):
+        print(near[["manager", "matches", "clubs", "signature", "distance"]]
+              .round(2).to_string(index=False))  # fmt: skip
+    return 0
+
+
 def cmd_style(args: argparse.Namespace) -> int:
     from recruit_intel.models import team_style
 
@@ -202,6 +237,11 @@ def register(sub) -> None:
     p.add_argument("--last", type=int, default=6, help="how many seasons to show")
     p.add_argument("--limit", type=int, default=8)
     p.set_defaults(func=cmd_style)
+
+    p = sub.add_parser("manager", help="a manager's style across his clubs, and similar ones")
+    p.add_argument("manager")
+    p.add_argument("--limit", type=int, default=6)
+    p.set_defaults(func=cmd_manager)
 
     p = sub.add_parser("bargains", help="players valued below what comparable players cost")
     p.add_argument("--group", help="position group, e.g. CB, W, ST")
