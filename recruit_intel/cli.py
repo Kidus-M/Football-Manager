@@ -1,4 +1,4 @@
-"""Command-line entry point: `recruit ingest` and `recruit squad`."""
+"""Command-line entry point: `recruit ingest`, `recruit match` and `recruit squad`."""
 
 import argparse
 import sys
@@ -9,6 +9,7 @@ import pandas as pd
 from recruit_intel import db
 from recruit_intel.analysis.squad import current_squad
 from recruit_intel.config import load_club
+from recruit_intel.identity import run as identity_run
 from recruit_intel.ingest import clubelo, fpl, transfermarkt, understat
 from recruit_intel.ingest.http import DAY, CachedClient
 
@@ -90,7 +91,18 @@ def cmd_ingest(args: argparse.Namespace) -> int:
                     )
 
     print(f"{run.ok}/{run.total} sources loaded into {args.db}")
+    _print_match_report(con)
     return 0 if run.ok else 1
+
+
+def _print_match_report(con) -> None:
+    print("\nIdentity matching")
+    print(identity_run.rebuild(con).to_string(index=False))
+
+
+def cmd_match(args: argparse.Namespace) -> int:
+    _print_match_report(db.connect(args.db))
+    return 0
 
 
 def cmd_squad(args: argparse.Namespace) -> int:
@@ -127,6 +139,9 @@ def main(argv: list[str] | None = None) -> int:
         "whole recruitment pool). Slow on first run: ~20 pages per league at 4s each",
     )
     p_ingest.set_defaults(func=cmd_ingest)
+
+    p_match = sub.add_parser("match", help="rebuild canonical player ids across sources")
+    p_match.set_defaults(func=cmd_match)
 
     p_squad = sub.add_parser("squad", help="print the current squad with per-90 stats")
     p_squad.add_argument("--season", type=int)
