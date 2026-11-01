@@ -13,8 +13,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from recruit_intel import CONFIG_DIR
 from recruit_intel.features.metrics import METRICS
-
-POSITIONS = {"GK", "DEF", "MID", "FWD"}
+from recruit_intel.features.positions import GROUPS
 
 
 def _tbd_to_none(value: Any) -> Any:
@@ -64,7 +63,7 @@ class ClubConfig(BaseModel):
 class Role(BaseModel):
     key: str
     label: str
-    positions: list[str]
+    groups: list[str]
     weights: dict[str, float]
 
     @model_validator(mode="after")
@@ -72,9 +71,9 @@ class Role(BaseModel):
         unknown = set(self.weights) - set(METRICS)
         if unknown:
             raise ValueError(f"role {self.key}: unknown metrics {sorted(unknown)}")
-        bad_pos = set(self.positions) - POSITIONS
-        if bad_pos:
-            raise ValueError(f"role {self.key}: unknown positions {sorted(bad_pos)}")
+        bad_groups = set(self.groups) - set(GROUPS)
+        if bad_groups:
+            raise ValueError(f"role {self.key}: unknown position groups {sorted(bad_groups)}")
         if any(w <= 0 for w in self.weights.values()):
             raise ValueError(f"role {self.key}: weights must be positive (percentiles are flipped)")
         return self
