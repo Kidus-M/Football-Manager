@@ -14,6 +14,9 @@ import pandas as pd
 from recruit_intel.features.per90 import per90_table
 
 FEATURES = ["npxg", "xa", "shots", "key_passes", "xg_chain", "xg_buildup", "npg", "assists"]
+# Embeddings describe *how* a player contributes, so they leave out actual
+# goals and assists: noisy outcomes that the xG-based features explain better.
+EMBED_FEATURES = ["npxg", "xa", "shots", "key_passes", "xg_chain", "xg_buildup"]
 MIN_MINUTES = 900
 
 
@@ -40,9 +43,9 @@ def player_seasons(con: duckdb.DuckDBPyConnection, min_minutes: int = MIN_MINUTE
     return df[cols + FEATURES].reset_index(drop=True)
 
 
-def transform(x: pd.DataFrame) -> np.ndarray:
+def transform(x: pd.DataFrame, features: list[str] = EMBED_FEATURES) -> np.ndarray:
     """Per-90 counts are right-skewed; log1p evens them out before scaling."""
-    return np.log1p(x[FEATURES].clip(lower=0).to_numpy(dtype=np.float32))
+    return np.log1p(x[features].astype(float).clip(lower=0).to_numpy(dtype=np.float32))
 
 
 def age_today(birth_date) -> float | None:

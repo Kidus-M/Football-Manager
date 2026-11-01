@@ -12,7 +12,7 @@ import pandas as pd
 from sklearn.mixture import GaussianMixture
 
 from recruit_intel.features.metrics import METRICS
-from recruit_intel.models.dataset import FEATURES, transform
+from recruit_intel.models.dataset import EMBED_FEATURES, transform
 
 K_RANGE = range(4, 13)
 
@@ -37,9 +37,9 @@ def describe(df: pd.DataFrame, labels: np.ndarray) -> pd.DataFrame:
         members = labels == c
         mean_z = z[members].mean(axis=0)
         order = np.argsort(mean_z)
-        high = [f"{METRICS[FEATURES[i]].label} +{mean_z[i]:.1f}" for i in order[::-1][:2]
+        high = [f"{METRICS[EMBED_FEATURES[i]].label} +{mean_z[i]:.1f}" for i in order[::-1][:2]
                 if mean_z[i] > 0.3]  # fmt: skip
-        low = [f"{METRICS[FEATURES[i]].label} {mean_z[i]:.1f}" for i in order[:1]
+        low = [f"{METRICS[EMBED_FEATURES[i]].label} {mean_z[i]:.1f}" for i in order[:1]
                if mean_z[i] < -0.3]  # fmt: skip
         groups = df.group[members].value_counts(normalize=True).head(3)
         rows.append(

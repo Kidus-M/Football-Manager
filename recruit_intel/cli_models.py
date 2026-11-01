@@ -30,7 +30,7 @@ def cmd_train(args: argparse.Namespace) -> int:
 
     emb, m = embeddings.train(seasons)
     emb.save()
-    print("Player embeddings (autoencoder, 8 per-90 features -> 4 dims)")
+    print("Player embeddings (autoencoder, 6 xG-based per-90 features -> 3 dims)")
     print(f"  reconstruction MSE: train {m['train_mse']:.3f}, held-out {m['test_mse']:.3f} "
           f"(predicting the mean: {m['baseline_mse']:.1f})\n")  # fmt: skip
 

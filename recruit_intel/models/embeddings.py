@@ -1,6 +1,6 @@
 """Player embeddings: a small autoencoder over per-90 output.
 
-The encoder squeezes a player's eight per-90 numbers into a few dimensions
+The encoder squeezes a player's six xG-based per-90 numbers into a few dimensions
 that capture *how* he contributes (shooter, creator, build-up player...).
 Players close together in that space play alike, whatever their league or
 listed position, which is what "players like X" searches need.
@@ -19,15 +19,15 @@ import torch
 from torch import nn
 
 from recruit_intel import DATA_DIR
-from recruit_intel.models.dataset import FEATURES, transform
+from recruit_intel.models.dataset import EMBED_FEATURES, transform
 
 MODEL_DIR = DATA_DIR / "models"
-LATENT = 4
+LATENT = 3
 SEED = 7
 
 
 class AutoEncoder(nn.Module):
-    def __init__(self, n_in: int = len(FEATURES), latent: int = LATENT) -> None:
+    def __init__(self, n_in: int = len(EMBED_FEATURES), latent: int = LATENT) -> None:
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Linear(n_in, 16), nn.GELU(), nn.Linear(16, latent)
@@ -61,7 +61,7 @@ class Embedder:
     def save(self, directory: Path = MODEL_DIR) -> None:
         directory.mkdir(parents=True, exist_ok=True)
         torch.save(self.model.state_dict(), directory / "player_ae.pt")
-        meta = {"features": FEATURES, "latent": LATENT,
+        meta = {"features": EMBED_FEATURES, "latent": LATENT,
                 "mean": self.mean.tolist(), "std": self.std.tolist()}  # fmt: skip
         (directory / "player_ae.json").write_text(json.dumps(meta, indent=2))
 
@@ -71,9 +71,9 @@ class Embedder:
         if not meta_path.exists():
             raise FileNotFoundError("no trained embedding model; run `recruit train`")
         meta = json.loads(meta_path.read_text())
-        if meta["features"] != FEATURES:
+        if meta["features"] != EMBED_FEATURES:
             raise ValueError("embedding model was trained on other features; retrain it")
-        model = AutoEncoder(len(FEATURES), meta["latent"])
+        model = AutoEncoder(len(EMBED_FEATURES), meta["latent"])
         model.load_state_dict(torch.load(directory / "player_ae.pt", weights_only=True))
         model.eval()
         return cls(model, np.array(meta["mean"], np.float32), np.array(meta["std"], np.float32))

@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from recruit_intel.models.dataset import FEATURES
+from recruit_intel.models.dataset import EMBED_FEATURES
 from recruit_intel.models.embeddings import Embedder, nearest
 
 
@@ -15,17 +15,18 @@ def similar_players(
     younger: bool = False,
     cheaper: bool = False,
     exclude: set[str] | None = None,
+    min_minutes: int = 900,
 ) -> pd.DataFrame:
-    """pool: one row per player with FEATURES (per 90), group, age, value_eur.
+    """pool: one row per player with EMBED_FEATURES (per 90), group, age, value_eur.
     Returns the k most similar players with a `distance` column."""
-    pool = pool.dropna(subset=FEATURES).reset_index(drop=True)
+    pool = pool.dropna(subset=EMBED_FEATURES).reset_index(drop=True)
     hits = pool.index[pool.player_id == target_id]
     if len(hits) == 0:
         raise LookupError("target has no qualifying per-90 row in the pool")
     t = int(hits[0])
     target = pool.loc[t]
 
-    mask = pd.Series(True, index=pool.index)
+    mask = pool.minutes >= min_minutes  # tiny samples make noisy neighbours
     if same_group:
         mask &= pool.group == target.group
     if younger and pd.notna(target.age):
@@ -36,7 +37,8 @@ def similar_players(
         mask &= ~pool.player_id.isin(exclude)
 
     vectors = embedder.embed(pool)
-    found = nearest(vectors, t, k, mask.to_numpy())
+    # Unknown age or value fails a "younger"/"cheaper" filter rather than passing it.
+    found = nearest(vectors, t, k, mask.fillna(False).to_numpy(dtype=bool))
     out = pool.loc[[i for i, _ in found]].copy()
     out["distance"] = [d for _, d in found]
     return out
