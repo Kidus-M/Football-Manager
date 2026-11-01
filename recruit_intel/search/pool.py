@@ -20,7 +20,6 @@ from recruit_intel.analysis.squad import market_snapshot
 from recruit_intel.features.per90 import per90_table
 from recruit_intel.features.percentiles import percentiles
 
-
 LEARNED_FACTORS = DATA_DIR / "models" / "league_factors.json"
 
 
