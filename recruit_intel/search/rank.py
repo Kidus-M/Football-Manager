@@ -3,8 +3,9 @@
 The score is a weighted sum of four 0-100 components, and each candidate's
 row says what drove it, so a rank is never a black-box verdict:
 
-- fit: role fit vs league peers, discounted by league strength and shrunk
-  toward 50 for small samples (the dominant term)
+- fit: role fit vs league peers, discounted by league strength and by the
+  share of the role's data available, and shrunk toward 50 for small samples
+  (the dominant term)
 - age: resale and peak-years profile, best at 23-26
 - value: cheaper is better (relative to the budget when there is one)
 - contract: fewer years left means a lower fee
@@ -78,8 +79,12 @@ def fit_scores(pool: pd.DataFrame, role: Role, groups: list[str],
         fit = role_fit(row, role, groups=groups)
         if fit is None:
             continue
+        # Distance from average is discounted for league strength and for
+        # missing role data (non-PL players have no defensive stats), so a fit
+        # built on part of the role can't outrank one built on all of it.
         s = strength.get(row.competition_id, 0.8)
-        adjusted = shrink(50 + (fit.score - 50) * s, row.minutes, RELIABLE_MINUTES)
+        discounted = 50 + (fit.score - 50) * s * fit.coverage
+        adjusted = shrink(discounted, row.minutes, RELIABLE_MINUTES)
         rows.append({"player_id": row.player_id, "fit_raw": fit.score,
                      "coverage": fit.coverage, "fit": adjusted})  # fmt: skip
     return pd.DataFrame(rows, columns=["player_id", "fit_raw", "coverage", "fit"])

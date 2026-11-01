@@ -257,8 +257,10 @@ def cmd_search(args: argparse.Namespace) -> int:
     seasons = list(range(season - args.seasons + 1, season + 1))
     pool = candidate_pool(con, seasons)
     roster_ids = set(profile.squad_roster(con, club).player_id)
-    print(f"{club.club} · market search · seasons {seasons[0]}-{_season_label(seasons[-1])}")
-    print("score = 65% fit (league-discounted) + 15% age + 10% value + 10% contract")
+    window = f"{_season_label(seasons[0])} to {_season_label(seasons[-1])}"
+    print(f"{club.club} · market search · stats {window}")
+    print("score = 65% fit (discounted for league and missing data) + 15% age + 10% value"
+          " + 10% contract")  # fmt: skip
     for key in slots:
         depth = by_slot[key]
         _search_slot(pool, depth.slot, depth.starter, club, args, roster_ids, league_strength())

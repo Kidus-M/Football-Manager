@@ -7,6 +7,7 @@ from recruit_intel.search.rank import (
     age_score,
     apply_filters,
     contract_score,
+    fit_scores,
     rank,
     value_scores,
 )
@@ -44,6 +45,21 @@ def test_league_strength_discounts_identical_output():
     fits = ranked.set_index("player_id").fit
     assert fits["epl"] > fits["l1"]
     assert list(ranked.player_id[:2]) == ["epl", "l1"]
+
+
+def test_partial_role_data_is_discounted():
+    role = Role(key="fb", label="FB", groups=["FB"], weights={"xa": 0.8, "tackles": 0.2})
+    pool = pd.DataFrame(
+        [
+            {"player_id": "full", "group": "FB", "competition_id": EPL, "minutes": 3000,
+             "xa": 90, "tackles": 90},
+            {"player_id": "partial", "group": "FB", "competition_id": EPL, "minutes": 3000,
+             "xa": 90, "tackles": None},
+        ]
+    )  # fmt: skip
+    fits = fit_scores(pool, role, ["FB"], STRENGTH).set_index("player_id").fit
+    assert fits["full"] == pytest.approx(90)
+    assert fits["partial"] == pytest.approx(82)  # 50 + 40 * 0.8 coverage
 
 
 def test_why_explains_the_rank():
