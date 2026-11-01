@@ -179,6 +179,74 @@ def train(pairs: pd.DataFrame, use_style: bool = True, epochs: int = 150) -> Fit
     return model
 
 
+def save(model: FitModel, report: dict) -> None:
+    import json
+
+    import joblib
+
+    from recruit_intel.models.embeddings import MODEL_DIR
+
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, MODEL_DIR / "team_fit.joblib")
+    (MODEL_DIR / "team_fit_validation.json").write_text(json.dumps(report, indent=2))
+
+
+def load() -> tuple[FitModel, dict]:
+    import json
+
+    import joblib
+
+    from recruit_intel.models.embeddings import MODEL_DIR
+
+    path = MODEL_DIR / "team_fit.joblib"
+    if not path.exists():
+        raise FileNotFoundError("no trained fit model; run `recruit train`")
+    # Safe to unpickle: only ever written by `save` above into the local,
+    # gitignored data/ directory.
+    report = json.loads((MODEL_DIR / "team_fit_validation.json").read_text())
+    return joblib.load(path), report
+
+
+def style_adds_skill(report: dict) -> bool:
+    """Did the style model beat the strength-only ablation on held-out movers?"""
+    movers = report["movers"]
+    return movers["with style"] < movers["strength only"]
+
+
+def fit_for_destination(
+    con: duckdb.DuckDBPyConnection,
+    model: FitModel,
+    style: StyleModel,
+    player_ids: list[str],
+    dest_team: str,
+) -> pd.Series:
+    """Fit score (% change in attacking involvement) of canonical players
+    moving to `dest_team` (Understat name) as it plays this season. Each
+    player is described by his latest qualifying season at a single club."""
+    teams = team_context(con, style)
+    names = con.execute("SELECT DISTINCT team_id, team_name, season FROM team_matches").df()
+    dest_rows = names[names.team_name == dest_team].merge(teams, on=["team_id", "season"])
+    if dest_rows.empty:
+        raise LookupError(f"no style data for {dest_team}")
+    dest = _prefixed(dest_rows.sort_values("season").tail(1), "dest_")
+
+    ids = con.execute(
+        """
+        SELECT player_id, source_player_id FROM player_source_ids
+        WHERE source = 'understat' AND player_id IN (SELECT unnest(?))
+        """,
+        [player_ids],
+    ).df()
+    seasons = player_team_seasons(con).merge(ids, on="source_player_id")
+    latest = seasons.sort_values("season").drop_duplicates("player_id", keep="last")
+    rows = latest.merge(_prefixed(teams, "ctx_"), on=["team_id", "season"])
+    for col in TEAM_COLS:
+        rows[col] = dest[col].iloc[0]
+    if rows.empty:
+        return pd.Series(dtype=float)
+    return pd.Series(model.fit_score(rows), index=rows.player_id.to_numpy())
+
+
 def validate(pairs: pd.DataFrame) -> dict:
     """Train on earlier seasons, test on the last complete season's pairs."""
     test_season = pairs.season.max()

@@ -56,7 +56,56 @@ def cmd_train(args: argparse.Namespace) -> int:
     print("   " + ", ".join(f"{k} {v:.0%}" for k, v in sm["strength_r2"].items()))
     print(f"  2-D style map reconstruction MSE {sm['map_test_mse']} (mean predictor: 1.0)")
 
+    from recruit_intel.models import team_fit
+
+    players = team_fit.player_team_seasons(con)
+    current = players.season.max()
+    pairs = team_fit.make_pairs(players, team_fit.team_context(con, style))
+    pairs = pairs[pairs.season + 1 < current]  # the current season is still being played
+    report = team_fit.validate(pairs)
+    team_fit.save(team_fit.train(pairs), report)
+    print("\nPlayer-team fit (two-tower net: player x destination style -> next-season change)")
+    print(f"  {report['train_pairs']} training pairs; tested on {report['test_pairs']} "
+          f"unseen next seasons ({report['test_moves']} club moves). Error (MSE, lower is "
+          f"better):")  # fmt: skip
+    rows = [{"pairs": k, **{n: round(v, 4) for n, v in report[k].items()}}
+            for k in ("all", "movers")]  # fmt: skip
+    print(pd.DataFrame(rows).to_string(index=False))
+    if team_fit.style_adds_skill(report):
+        print("  -> style adds skill beyond strength on held-out movers")
+    else:
+        print("  -> style adds NO skill beyond strength: fit scores are not used in search")
+
     print("\nSaved to data/models/; `recruit search` now uses the learned league factors.")
+    return 0
+
+
+def cmd_fit(args: argparse.Namespace) -> int:
+    from recruit_intel.analysis.profile import find_players
+    from recruit_intel.models import team_fit, team_style
+
+    club = load_club(args.club)
+    con = db.connect(args.db)
+    model, report = team_fit.load()
+    pool = _pool(con, 2)
+    dest = args.team or str(club.source_name("understat"))
+    rows = []
+    for query in args.players:
+        hits = find_players(pool, query)
+        if len(hits) != 1:
+            print(f"'{query}' matched {len(hits)} players: {', '.join(hits.name.head(8))}")
+            return 1
+        rows.append(hits.iloc[0])
+    scores = team_fit.fit_for_destination(
+        con, model, team_style.load(), [r.player_id for r in rows], dest
+    )
+    print(f"Projected change in attacking involvement (npxG + xA + xGChain) at {dest}:\n")
+    for r in rows:
+        s = scores.get(r.player_id)
+        print(f"  {r['name']:<28} {'no qualifying season' if s is None else f'{s:+.0f}%'}")
+    if not team_fit.style_adds_skill(report):
+        print("\n  Caution: on held-out seasons this model did not beat a strength-only "
+              "version, so treat these as unvalidated.")  # fmt: skip
     return 0
 
 
@@ -237,6 +286,11 @@ def register(sub) -> None:
     p.add_argument("--last", type=int, default=6, help="how many seasons to show")
     p.add_argument("--limit", type=int, default=8)
     p.set_defaults(func=cmd_style)
+
+    p = sub.add_parser("fit", help="projected output change if players joined a team")
+    p.add_argument("players", nargs="+")
+    p.add_argument("--team", help="Understat team name (default: the club)")
+    p.set_defaults(func=cmd_fit)
 
     p = sub.add_parser("manager", help="a manager's style across his clubs, and similar ones")
     p.add_argument("manager")
