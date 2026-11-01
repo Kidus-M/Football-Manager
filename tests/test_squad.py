@@ -1,6 +1,7 @@
 from datetime import date
 
 import pandas as pd
+import pytest
 
 from recruit_intel.analysis.squad import current_squad
 from recruit_intel.config import load_club
@@ -56,4 +57,4 @@ def test_squad_joins_sources_through_canonical_ids():
     assert row["name"] == "Bruno Fernandes"  # canonical (Transfermarkt) name
     assert row["detailed_position"] == "Attacking Midfield"
     assert (row["value_m_eur"], row["contract"], row["minutes"]) == (35.0, 2027, 900)
-    assert row["npxg"] == 0.3 and row["tackles"] == 1.0
+    assert row["npxg"] == pytest.approx(0.3) and row["tackles"] == pytest.approx(1.0)
