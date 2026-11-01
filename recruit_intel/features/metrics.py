@@ -36,5 +36,9 @@ METRICS: dict[str, Metric] = {
         Metric("recoveries", "Ball recoveries", "fpl"),
         Metric("saves", "Saves", "fpl"),
         Metric("goals_conceded", "Goals conceded", "fpl", higher_is_better=False),
+        Metric("xg_conceded", "xG conceded", "fpl", higher_is_better=False),
+        Metric("defensive_contribution", "Defensive contribution", "fpl"),
+        Metric("clean_sheets", "Clean sheets", "fpl"),
+        Metric("starts", "Starts", "fpl"),
     ]
 }
