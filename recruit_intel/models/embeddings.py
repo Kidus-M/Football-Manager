@@ -79,6 +79,23 @@ class Embedder:
         return cls(model, np.array(meta["mean"], np.float32), np.array(meta["std"], np.float32))
 
 
+def fit_autoencoder(
+    model: AutoEncoder, x: torch.Tensor, epochs: int, lr: float = 3e-3, batch: int = 256
+) -> AutoEncoder:
+    """Train `model` to reconstruct the already-scaled rows of `x` (MSE, Adam)."""
+    torch.manual_seed(SEED)
+    opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
+    model.train()
+    for _ in range(epochs):
+        for idx in torch.randperm(len(x)).split(batch):
+            opt.zero_grad()
+            loss = nn.functional.mse_loss(model(x[idx]), x[idx])
+            loss.backward()
+            opt.step()
+    model.eval()
+    return model
+
+
 def train(df: pd.DataFrame, epochs: int = 300, lr: float = 3e-3) -> tuple[Embedder, dict]:
     """Fit on 85% of rows; report reconstruction error on the held-out 15%."""
     torch.manual_seed(SEED)
@@ -91,15 +108,7 @@ def train(df: pd.DataFrame, epochs: int = 300, lr: float = 3e-3) -> tuple[Embedd
 
     model = AutoEncoder()
     emb = Embedder(model, mean.astype(np.float32), std.astype(np.float32))
-    xt = emb._scale(train_df)
-    opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
-    for _ in range(epochs):
-        for batch in torch.randperm(len(xt)).split(256):
-            opt.zero_grad()
-            loss = nn.functional.mse_loss(model(xt[batch]), xt[batch])
-            loss.backward()
-            opt.step()
-    model.eval()
+    fit_autoencoder(model, emb._scale(train_df), epochs, lr)
     metrics = {
         "rows": len(df),
         "train_mse": emb.reconstruction_error(train_df),
