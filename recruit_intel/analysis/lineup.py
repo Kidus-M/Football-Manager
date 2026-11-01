@@ -31,6 +31,8 @@ class SlotDepth:
     slot: Slot
     starter: Candidate | None
     backups: list[Candidate] = field(default_factory=list)  # best first, non-starters
+    # Eligible squad players with no rating (no minutes yet): unknown, not absent.
+    unrated: list[str] = field(default_factory=list)
 
 
 def shrink(fit: float, minutes: float, min_minutes: float) -> float:
@@ -74,16 +76,32 @@ def best_xi(candidates: dict[str, list[Candidate]]) -> dict[str, Candidate]:
 
 
 def depth_chart(
-    squad: pd.DataFrame, slots: list[Slot], roles: dict[str, Role], min_minutes: int
+    squad: pd.DataFrame,
+    slots: list[Slot],
+    roles: dict[str, Role],
+    min_minutes: int,
+    roster: pd.DataFrame | None = None,
 ) -> list[SlotDepth]:
+    """`squad` holds rated players (percentile rows); `roster` (player_id, name,
+    group) is the full squad, so eligible players with no rating are listed."""
     candidates = {s.key: slot_candidates(squad, s, roles[s.role], min_minutes) for s in slots}
     xi = best_xi(candidates)
     starters = {c.player_id for c in xi.values()}
-    return [
-        SlotDepth(
-            slot=s,
-            starter=xi.get(s.key),
-            backups=[c for c in candidates[s.key] if c.player_id not in starters],
+    chart = []
+    for s in slots:
+        rated = {c.player_id for c in candidates[s.key]}
+        unrated = (
+            []
+            if roster is None
+            else [r.name for r in roster.itertuples()
+                  if r.group in s.groups and r.player_id not in rated]  # fmt: skip
         )
-        for s in slots
-    ]
+        chart.append(
+            SlotDepth(
+                slot=s,
+                starter=xi.get(s.key),
+                backups=[c for c in candidates[s.key] if c.player_id not in starters],
+                unrated=unrated,
+            )
+        )
+    return chart

@@ -13,7 +13,7 @@ from recruit_intel.config import ClubConfig, Role, load_roles
 from recruit_intel.features.metrics import METRICS
 from recruit_intel.features.per90 import per90_table
 from recruit_intel.features.percentiles import percentiles
-from recruit_intel.features.positions import GROUPS
+from recruit_intel.features.positions import GROUPS, group_of
 from recruit_intel.identity.names import normalize
 
 STRENGTH = 80  # percentile at or above which a metric is a strength
@@ -86,23 +86,30 @@ def find_players(pct: pd.DataFrame, query: str) -> pd.DataFrame:
     return pct[names.map(lambda n: all(w in n.split() or w in n for w in words))]
 
 
+def squad_roster(con: duckdb.DuckDBPyConnection, club: ClubConfig) -> pd.DataFrame:
+    """Every registered squad player (the club's FPL roster), rated or not:
+    player_id, name, group."""
+    roster = con.execute(
+        """
+        SELECT DISTINCT ids.player_id, pl.name, pl.position, pl.detailed_position
+        FROM source_players p
+        JOIN player_source_ids ids USING (source, source_player_id)
+        JOIN players pl USING (player_id)
+        WHERE p.source = 'fpl' AND p.team_name = ?
+        """,
+        [str(club.source_name("fpl"))],
+    ).df()
+    roster["group"] = [
+        group_of(d, b) for d, b in zip(roster.detailed_position, roster.position, strict=True)
+    ]
+    return roster[["player_id", "name", "group"]]
+
+
 def squad_percentiles(
     con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int
 ) -> pd.DataFrame:
     """Percentile rows for the club's squad (its FPL roster); attrs carry min_minutes."""
-    squad_ids = (
-        con.execute(
-            """
-        SELECT DISTINCT ids.player_id
-        FROM source_players p
-        JOIN player_source_ids ids USING (source, source_player_id)
-        WHERE p.source = 'fpl' AND p.team_name = ?
-        """,
-            [str(club.source_name("fpl"))],
-        )
-        .df()
-        .player_id
-    )
+    squad_ids = squad_roster(con, club).player_id
     pct = peer_percentiles(con, club, season)
     squad = pct[pct.player_id.isin(squad_ids)].reset_index(drop=True)
     squad.attrs["min_minutes"] = pct.attrs["min_minutes"]
