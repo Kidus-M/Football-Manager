@@ -17,7 +17,8 @@ def per90_table(con: duckdb.DuckDBPyConnection, season: int) -> pd.DataFrame:
     competition_id, minutes, then one column per canonical metric."""
     rows = con.execute(
         """
-        SELECT ids.player_id, s.source, s.competition_id, s.minutes, s.metric, s.value
+        SELECT ids.player_id, s.source, s.source_player_id, s.competition_id, s.minutes,
+               s.metric, s.value
         FROM player_season_stats s
         JOIN player_source_ids ids USING (source, source_player_id)
         WHERE s.season = ? AND s.metric IN (SELECT unnest(?))
@@ -30,14 +31,17 @@ def per90_table(con: duckdb.DuckDBPyConnection, season: int) -> pd.DataFrame:
     # One player can appear twice in a source (two clubs, same league):
     # sum totals and minutes per (player, competition, source) first.
     minutes = (
-        rows.drop_duplicates(["player_id", "source", "competition_id", "minutes"])
+        rows.drop_duplicates(["player_id", "source", "source_player_id", "competition_id"])
         .groupby(["player_id", "competition_id", "source"])
         .minutes.sum()
     )
     totals = rows.groupby(["player_id", "competition_id", "source", "metric"]).value.sum().unstack()
     per90 = totals.div(minutes.where(minutes > 0), axis=0) * 90
-    # Collapse sources: each metric comes from exactly one source.
-    wide = per90.groupby(level=["player_id", "competition_id"]).first()
+    # Several sources publish some metrics (FPL and Understat both have xG);
+    # each metric is taken only from the source the catalogue assigns it.
+    long = per90.stack().rename("value").reset_index()
+    long = long[long.source == long.metric.map(lambda m: METRICS[m].source)]
+    wide = long.pivot_table(index=["player_id", "competition_id"], columns="metric", values="value")
     wide["minutes"] = minutes.groupby(level=["player_id", "competition_id"]).max()
     wide = wide.reset_index()
 
