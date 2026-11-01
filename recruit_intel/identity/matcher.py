@@ -40,12 +40,15 @@ class Stage:
     margin: float
 
 
-# Understat -> Transfermarkt, narrowest scope first.
+# Understat -> Transfermarkt, narrowest scope first. "team_surname" catches a
+# legal first name against a known one ('Julian Chabot' / 'Jeff Chabot').
 UNDERSTAT_STAGES = (
     Stage("team", 75, 5),
+    Stage("team_surname", 0, 0),
     Stage("competition", 88, 8),
     Stage("global", 95, 10),
 )
+SURNAME_SCORE = 70.0
 DOB_MIN_SCORE = 55
 DIRECT_STAGE = Stage("direct", 80, 5)
 
@@ -76,6 +79,17 @@ def _best(name: str, pool: pd.DataFrame, stage: Stage) -> tuple[float, str] | No
     if top[0] >= stage.min_score and top[0] - runner_up >= stage.margin:
         return top
     return None
+
+
+def _unique_surname(name: str, pool: pd.DataFrame) -> tuple[float, str] | None:
+    """The one player in `pool` whose name contains this name's surname."""
+    words = normalize(name).split()
+    if len(words) < 2 or len(words[-1]) < 3:
+        return None
+    surname = words[-1]
+    hits = [pid for pid, n in zip(pool.source_player_id, pool.name, strict=True)
+            if surname in normalize(n).split()]  # fmt: skip
+    return (SURNAME_SCORE, hits[0]) if len(hits) == 1 else None
 
 
 def match_by_birth_date(src: pd.DataFrame, tm: pd.DataFrame) -> Links:
@@ -109,14 +123,22 @@ def match_understat(us: pd.DataFrame, tm: pd.DataFrame, team_map: dict) -> Links
         free_tm = tm[~tm.source_player_id.isin(taken)]
         cands = []
         for row in us[~us.source_player_id.isin(links)].itertuples():
-            if stage.method == "team":
+            if stage.method.startswith("team"):
                 tm_team = team_map.get((row.competition_id, row.team_name))
                 pool = free_tm[free_tm.team_name == tm_team] if tm_team else free_tm.iloc[:0]
             elif stage.method == "competition":
                 pool = free_tm[free_tm.competition_id == row.competition_id]
             else:
                 pool = free_tm
-            best = _best(row.name, pool, stage)
+            if stage.method == "team_surname":
+                # Uniqueness is judged against the whole squad, taken or not,
+                # so two players sharing a surname never match this way.
+                full_squad = tm[tm.team_name == tm_team] if tm_team else tm.iloc[:0]
+                best = _unique_surname(row.name, full_squad)
+                if best and best[1] in taken:
+                    best = None
+            else:
+                best = _best(row.name, pool, stage)
             if best:
                 cands.append((best[0], row.source_player_id, best[1]))
         _assign(cands, links, taken, stage.method)

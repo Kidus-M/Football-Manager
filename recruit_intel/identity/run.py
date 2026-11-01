@@ -27,22 +27,24 @@ def load_inputs(con: duckdb.DuckDBPyConnection) -> dict[str, pd.DataFrame]:
         FROM source_players WHERE source = 'fpl'
         """
     ).df()
-    # Understat: each player's latest season decides his competition.
+    # Understat: club and competition both come from the player's latest
+    # season row (most minutes on ties), so the two always agree.
     us = con.execute(
         """
-        SELECT p.source_player_id, p.name, p.position, p.team_name,
-               s.competition_id, s.season, s.minutes
+        SELECT p.source_player_id, p.name, p.position,
+               s.team_name, s.competition_id, s.season, s.minutes
         FROM source_players p
-        JOIN (SELECT source_player_id,
-                     arg_max(competition_id, season) AS competition_id,
-                     max(season) AS season,
-                     arg_max(minutes, season) AS minutes
+        JOIN (SELECT source_player_id, team_name, competition_id, season, minutes
               FROM player_season_stats
               WHERE source = 'understat' AND metric = 'xg'
-              GROUP BY 1) s USING (source_player_id)
+              QUALIFY row_number() OVER (PARTITION BY source_player_id
+                                         ORDER BY season DESC, minutes DESC) = 1
+             ) s USING (source_player_id)
         WHERE p.source = 'understat'
         """
     ).df()
+    # Players who moved mid-season are listed as "Old Club,New Club".
+    us["team_name"] = us["team_name"].str.split(",").str[-1]
     for df in (tm, fpl):
         df["birth_date"] = pd.to_datetime(df["birth_date"]).dt.date
     return {"tm": tm, "fpl": fpl, "us": us}
