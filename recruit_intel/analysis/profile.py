@@ -37,11 +37,15 @@ def strengths_weaknesses(row: pd.Series) -> tuple[list[str], list[str]]:
     return strengths, weaknesses
 
 
-def role_fit(row: pd.Series, role: Role) -> RoleFit | None:
+def role_fit(row: pd.Series, role: Role, groups: list[str] | None = None) -> RoleFit | None:
     """Weighted mean percentile over the role's metrics, renormalised over the
     metrics that have data. None if the player's position group can't play the
-    role or too little of the role is covered (e.g. no FPL defensive data)."""
-    if row.get("group") not in role.groups:
+    role or too little of the role is covered (e.g. no FPL defensive data).
+
+    `groups` overrides which position groups may play it: a formation slot can
+    let a winger play wing-back even though the role is defined for full-backs.
+    """
+    if row.get("group") not in (groups or role.groups):
         return None
     available = {m: w for m, w in role.weights.items() if pd.notna(row.get(m))}
     coverage = sum(available.values()) / sum(role.weights.values())
