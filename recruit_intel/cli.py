@@ -228,6 +228,8 @@ def _search_slot(pool, slot, starter, club, args, roster_ids, strength) -> None:
         base = None if fits.empty else fits.fit.iloc[0]
     base_txt = f"{starter.name} {base:.0f}" if starter and base is not None else "-"
     print(f"\n{slot.key} · {role.label} · current starter: {base_txt}")
+    if args.upgrades and base is not None:
+        ranked = ranked[ranked.fit > base]
     if ranked.empty:
         print("  no candidates match the filters")
         return
@@ -364,6 +366,9 @@ def main(argv: list[str] | None = None) -> int:
     p_search.add_argument("--min-minutes", type=int, help="default: club recruitment.min_minutes")
     p_search.add_argument("--seasons", type=int, default=2, help="season window for stats")
     p_search.add_argument("--limit", type=int, default=8)
+    p_search.add_argument(
+        "--upgrades", action="store_true", help="only candidates whose fit beats the starter's"
+    )
     p_search.set_defaults(func=cmd_search)
 
     args = parser.parse_args(argv)

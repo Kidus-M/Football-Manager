@@ -17,6 +17,8 @@ py -3.12 -m venv .venv
 .venv/Scripts/recruit profile Mainoo Tielemans --radar data/radars/cm.svg   # compare + SVG radar
 .venv/Scripts/recruit gaps --depth    # best XI for the club's formation, cover, recruitment priorities
 .venv/Scripts/recruit gaps --formation 3-4-2-1   # same squad, another shape
+.venv/Scripts/recruit search          # ranked market candidates for the top 3 gaps
+.venv/Scripts/recruit search --slot ST --max-value 50 --max-age 25 --upgrades
 .venv/Scripts/pytest
 ```
 
