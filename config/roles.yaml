@@ -1,29 +1,30 @@
 # Shared role library. Every club config picks roles from here by key.
 #
 # A role is a weighted stat profile over per-90 metrics. Weights are relative
-# (normalised at scoring time); a negative weight means lower is better.
-# `positions` lists the broad positions a player must be listed at to be
-# scored for the role. Metric names are the canonical ones defined in
-# recruit_intel/features/metrics.py.
+# (normalised at scoring time) and always positive: roles are scored on
+# percentiles, which already flip lower-is-better metrics like goals_conceded.
+# `groups` lists the position groups (recruit_intel/features/positions.py:
+# GK, CB, FB, DM, CM, AM, W, ST) whose players are scored for the role.
+# Metric names are the canonical ones in recruit_intel/features/metrics.py.
 
 sweeper_keeper:
   label: Sweeper keeper
-  positions: [GK]
+  groups: [GK]
   weights:
     saves: 0.35
-    goals_conceded: -0.25
+    goals_conceded: 0.25
     xg_buildup: 0.40
 
 shot_stopper:
   label: Shot stopper
-  positions: [GK]
+  groups: [GK]
   weights:
     saves: 0.60
-    goals_conceded: -0.40
+    goals_conceded: 0.40
 
 ball_playing_cb:
   label: Ball-playing centre-back
-  positions: [DEF]
+  groups: [CB]
   weights:
     xg_buildup: 0.35
     cbi: 0.25
@@ -32,7 +33,7 @@ ball_playing_cb:
 
 stopper_cb:
   label: Stopper centre-back
-  positions: [DEF]
+  groups: [CB]
   weights:
     cbi: 0.40
     tackles: 0.35
@@ -40,7 +41,7 @@ stopper_cb:
 
 attacking_wingback:
   label: Attacking wing-back
-  positions: [DEF, MID]
+  groups: [FB]
   weights:
     xa: 0.30
     key_passes: 0.25
@@ -48,9 +49,25 @@ attacking_wingback:
     recoveries: 0.10
     tackles: 0.10
 
+defensive_fullback:
+  label: Defensive full-back
+  groups: [FB]
+  weights:
+    tackles: 0.35
+    cbi: 0.35
+    recoveries: 0.30
+
+ball_winner:
+  label: Ball-winning midfielder
+  groups: [DM, CM]
+  weights:
+    tackles: 0.40
+    recoveries: 0.35
+    cbi: 0.25
+
 deep_playmaker:
   label: Deep-lying playmaker
-  positions: [MID]
+  groups: [DM, CM]
   weights:
     xg_buildup: 0.40
     recoveries: 0.25
@@ -59,7 +76,7 @@ deep_playmaker:
 
 box_to_box:
   label: Box-to-box midfielder
-  positions: [MID]
+  groups: [CM, DM]
   weights:
     xg_chain: 0.30
     npxg: 0.15
@@ -68,16 +85,25 @@ box_to_box:
 
 creative_10:
   label: Creative No. 10
-  positions: [MID, FWD]
+  groups: [AM, CM]
   weights:
     xa: 0.35
     key_passes: 0.30
     xg_chain: 0.20
     npxg: 0.15
 
+wide_playmaker:
+  label: Wide playmaker
+  groups: [W, AM]
+  weights:
+    xa: 0.35
+    key_passes: 0.35
+    xg_chain: 0.20
+    shots: 0.10
+
 inside_forward:
   label: Inside forward
-  positions: [MID, FWD]
+  groups: [W, AM]
   weights:
     npxg: 0.40
     shots: 0.20
@@ -86,7 +112,7 @@ inside_forward:
 
 complete_forward:
   label: Complete forward
-  positions: [FWD]
+  groups: [ST]
   weights:
     npxg: 0.45
     shots: 0.15
@@ -95,7 +121,7 @@ complete_forward:
 
 poacher:
   label: Poacher
-  positions: [FWD]
+  groups: [ST]
   weights:
     npxg: 0.60
     shots: 0.25

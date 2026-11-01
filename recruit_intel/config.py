@@ -75,6 +75,8 @@ class Role(BaseModel):
         bad_pos = set(self.positions) - POSITIONS
         if bad_pos:
             raise ValueError(f"role {self.key}: unknown positions {sorted(bad_pos)}")
+        if any(w <= 0 for w in self.weights.values()):
+            raise ValueError(f"role {self.key}: weights must be positive (percentiles are flipped)")
         return self
 
 
