@@ -12,26 +12,33 @@ from recruit_intel.features.metrics import METRICS
 from recruit_intel.features.positions import group_of
 
 
-def per90_table(con: duckdb.DuckDBPyConnection, season: int) -> pd.DataFrame:
+def per90_table(con: duckdb.DuckDBPyConnection, season: int | list[int]) -> pd.DataFrame:
     """Columns: player_id, name, birth_date, position, detailed_position, group,
-    competition_id, minutes, then one column per canonical metric."""
+    competition_id, minutes, then one column per canonical metric.
+
+    Several seasons pool their totals and minutes into one rate per player and
+    competition: a bigger sample, at the cost of weighting old form equally.
+    """
+    seasons = [season] if isinstance(season, int) else list(season)
     rows = con.execute(
         """
-        SELECT ids.player_id, s.source, s.source_player_id, s.competition_id, s.minutes,
-               s.metric, s.value
+        SELECT ids.player_id, s.source, s.source_player_id, s.season, s.competition_id,
+               s.minutes, s.metric, s.value
         FROM player_season_stats s
         JOIN player_source_ids ids USING (source, source_player_id)
-        WHERE s.season = ? AND s.metric IN (SELECT unnest(?))
+        WHERE s.season IN (SELECT unnest(?)) AND s.metric IN (SELECT unnest(?))
         """,
-        [season, list(METRICS)],
+        [seasons, list(METRICS)],
     ).df()
     if rows.empty:
-        raise LookupError(f"no stats for season {season}; run `recruit ingest`")
+        raise LookupError(f"no stats for seasons {seasons}; run `recruit ingest`")
 
-    # One player can appear twice in a source (two clubs, same league):
-    # sum totals and minutes per (player, competition, source) first.
+    # A player can appear more than once per source and competition (two clubs,
+    # several seasons): sum totals and minutes per (player, competition, source).
     minutes = (
-        rows.drop_duplicates(["player_id", "source", "source_player_id", "competition_id"])
+        rows.drop_duplicates(
+            ["player_id", "source", "source_player_id", "season", "competition_id"]
+        )
         .groupby(["player_id", "competition_id", "source"])
         .minutes.sum()
     )

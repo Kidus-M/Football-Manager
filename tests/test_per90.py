@@ -47,6 +47,23 @@ def test_each_source_uses_its_own_minutes_and_clubs_are_summed():
     assert row["minutes"] == 900
 
 
+def test_multiple_seasons_pool_totals_and_minutes():
+    con = connect(":memory:")
+    upsert(con, "players", pd.DataFrame([
+        {"player_id": "tm-1", "name": "A", "position": "FWD",
+         "detailed_position": "Centre-Forward"},
+    ]))  # fmt: skip
+    upsert(con, "player_source_ids", pd.DataFrame([
+        {"player_id": "tm-1", "source": "understat", "source_player_id": "2"},
+    ]))  # fmt: skip
+    old = {**_row("understat", "2", "npxg", 9.0, 2700), "season": 2025}
+    new = _row("understat", "2", "npxg", 1.0, 900)
+    upsert(con, "player_season_stats", pd.DataFrame([old, new]))
+    row = per90_table(con, [2025, 2026]).iloc[0]
+    assert row["minutes"] == 3600
+    assert row["npxg"] == pytest.approx(0.25)  # (9 + 1) / 3600 * 90
+
+
 def test_goals_prevented_is_xg_conceded_minus_goals():
     con = connect(":memory:")
     upsert(con, "players", pd.DataFrame([

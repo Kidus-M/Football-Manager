@@ -1,0 +1,15 @@
+# Relative league strength, 1.0 = strongest. Used to discount role fits earned
+# in weaker leagues when ranking recruits: a fit's distance from average (50)
+# is multiplied by the strength, so a 90 in a 0.85 league counts as 84.
+#
+# A stopgap until league ratings come from ClubElo (currently unreachable)
+# and the league-translation model (spec ML #3) projects output properly.
+ENG-Premier League: 1.00
+ESP-La Liga: 0.94
+GER-Bundesliga: 0.92
+ITA-Serie A: 0.92
+FRA-Ligue 1: 0.87
+POR-Liga Portugal: 0.80
+NED-Eredivisie: 0.78
+BEL-Pro League: 0.75
+RUS-Premier League: 0.72
