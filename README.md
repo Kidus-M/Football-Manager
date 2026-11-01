@@ -36,6 +36,28 @@ py -3.12 -m venv .venv
 
 Club is chosen with `--club <file stem>` (default `man_utd`, from `config/clubs/`).
 
+## Defensive stats (API-Football) and data checks
+
+Tackles, interceptions, blocks, duels and dribbled-past for every league come
+from [API-Football](https://www.api-football.com). Put a free key in `.env`
+(see `.env.example`), then run once a day until it reports nothing left:
+
+```bash
+.venv/Scripts/recruit ingest --apifootball ENG ESP ITA GER FRA
+```
+
+The free plan allows 100 requests a day, only seasons up to 2024-25, and only
+three pages per listing, so players are fetched club by club (~200 requests
+for the top five leagues, about two days) and 2024-25 is used as a labelled,
+older fallback: it fills defensive metrics only where the current window has
+none, and the views say which season the numbers are from. Records where
+API-Football attaches one stat line to two clubs are dropped.
+
+```bash
+.venv/Scripts/recruit audit          # data-quality report
+.venv/Scripts/recruit audit --fix    # repair the safely fixable problems
+```
+
 ## Dashboard
 
 A Next.js app in `app/` over a read-only FastAPI backend (`recruit_intel/api/`).

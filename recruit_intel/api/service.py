@@ -181,6 +181,8 @@ def player(player_id: str) -> dict | None:
         "basis": basis,
         "minutes": clean(row.minutes),
         "qualified": clean(row.get("qualified")),
+        # Season the older API-Football defensive stats come from, if used.
+        "defence_season": clean(row.get("defence_season")),
         "peers": clean(row.get("peers")),
         "club": clean(m.club) if m is not None else None,
         "age": clean(m.age) if m is not None else None,

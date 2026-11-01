@@ -39,6 +39,12 @@ function PlayerCard({ p, colour, onRemove }: { p: Player; colour: string; onRemo
       {p.qualified === false && (
         <p className="mt-2 text-xs text-club">Small sample: percentiles are a preview, not a verdict.</p>
       )}
+      {p.defence_season != null && (
+        <p className="mt-2 text-xs text-fog">
+          Interceptions, blocks, duels and dribbled-past are from {p.defence_season}-
+          {String((p.defence_season + 1) % 100).padStart(2, "0")}, the newest season the free data plan allows.
+        </p>
+      )}
       <p className="mt-3 text-sm">
         <span className="text-fog">Best roles </span>
         {p.roles.map((r) => `${r.role} ${r.fit}`).join(" · ") || "–"}

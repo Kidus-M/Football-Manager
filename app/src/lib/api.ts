@@ -56,6 +56,7 @@ export type Player = {
   basis: "peer_group" | "own_league";
   minutes: number;
   qualified: boolean | null;
+  defence_season: number | null;
   peers: number | null;
   club: string | null;
   age: number | null;

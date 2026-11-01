@@ -222,6 +222,10 @@ def _print_player(row: pd.Series, min_minutes: int) -> None:
     print(f"\n{row['name']}  ·  {row.detailed_position or row['group']}  ·  "
           f"{int(row.minutes)} min{sample}")  # fmt: skip
     print(f"vs {int(row.peers)} {group['label'].lower()}")
+    older = row.get("defence_season")
+    if older is not None and not pd.isna(older):
+        print(f"(interceptions, blocks, duels and dribbled-past from {_season_label(int(older))}: "
+              f"the newest season API-Football's free plan allows)")  # fmt: skip
     for m in group["metrics"]:
         pct = row.get(m)
         bar = "-" if pd.isna(pct) else "█" * round(pct / 5)
