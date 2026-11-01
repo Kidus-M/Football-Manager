@@ -75,6 +75,23 @@ CREATE TABLE IF NOT EXISTS market (
     PRIMARY KEY (source, source_player_id, snapshot_date)
 );
 
+CREATE TABLE IF NOT EXISTS team_matches (
+    source TEXT NOT NULL,
+    team_id TEXT NOT NULL,
+    team_name TEXT NOT NULL,
+    season INTEGER NOT NULL,
+    competition_id TEXT NOT NULL,
+    match_date TIMESTAMP NOT NULL,
+    home BOOLEAN,
+    xg DOUBLE, xga DOUBLE, npxg DOUBLE, npxga DOUBLE,
+    ppda_passes INTEGER, ppda_actions INTEGER,      -- opponent passes / our defensive actions
+    oppda_passes INTEGER, oppda_actions INTEGER,    -- the same, when the opponent presses us
+    deep INTEGER, deep_allowed INTEGER,             -- completions within ~20m of goal
+    scored INTEGER, conceded INTEGER,
+    xpts DOUBLE, pts INTEGER,
+    PRIMARY KEY (source, team_id, match_date)
+);
+
 CREATE TABLE IF NOT EXISTS players (
     player_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,

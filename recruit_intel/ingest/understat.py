@@ -91,10 +91,46 @@ def parse(data: dict, league: str, season: int) -> dict[str, pd.DataFrame]:
                     "value": float(p[field]),
                 }
             )
-    return {
+    out = {
         "source_players": pd.DataFrame(players),
         "player_season_stats": pd.DataFrame(stats),
     }
+    if data.get("teams"):
+        out["team_matches"] = parse_teams(data["teams"], competition, season)
+    return out
+
+
+def parse_teams(teams: dict, competition: str, season: int) -> pd.DataFrame:
+    """Per-match team stats: the raw material for team style profiles."""
+    rows = []
+    for team in teams.values():
+        for m in team["history"]:
+            rows.append(
+                {
+                    "source": SOURCE,
+                    "team_id": str(team["id"]),
+                    "team_name": team["title"],
+                    "season": season,
+                    "competition_id": competition,
+                    "match_date": pd.Timestamp(m["date"]),
+                    "home": m["h_a"] == "h",
+                    "xg": float(m["xG"]),
+                    "xga": float(m["xGA"]),
+                    "npxg": float(m["npxG"]),
+                    "npxga": float(m["npxGA"]),
+                    "ppda_passes": int(m["ppda"]["att"]),
+                    "ppda_actions": int(m["ppda"]["def"]),
+                    "oppda_passes": int(m["ppda_allowed"]["att"]),
+                    "oppda_actions": int(m["ppda_allowed"]["def"]),
+                    "deep": int(m["deep"]),
+                    "deep_allowed": int(m["deep_allowed"]),
+                    "scored": int(m["scored"]),
+                    "conceded": int(m["missed"]),
+                    "xpts": float(m["xpts"]),
+                    "pts": int(m["pts"]),
+                }
+            )
+    return pd.DataFrame(rows)
 
 
 def ingest(league: str, season: int, current_season: int, client=None) -> dict[str, pd.DataFrame]:

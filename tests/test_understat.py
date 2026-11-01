@@ -45,5 +45,29 @@ def test_mid_season_move_keeps_latest_club():
     assert out["source_players"].team_name.iloc[0] == "Manchester United"
 
 
+TEAMS = {
+    "71": {
+        "id": "71",
+        "title": "Aston Villa",
+        "history": [
+            {"h_a": "h", "xG": 0.32, "xGA": 1.4, "npxG": 0.32, "npxGA": 1.4,
+             "ppda": {"att": 227, "def": 12}, "ppda_allowed": {"att": 146, "def": 24},
+             "deep": 2, "deep_allowed": 6, "scored": 0, "missed": 0, "xpts": 0.43,
+             "result": "d", "date": "2025-08-16 11:30:00", "pts": 1},
+        ],
+    }
+}  # fmt: skip
+
+
+def test_parse_teams_and_store():
+    from recruit_intel.db import connect, upsert
+
+    out = understat.parse({"players": [ROW], "teams": TEAMS}, "EPL", 2025)
+    m = out["team_matches"].iloc[0]
+    assert (m.team_name, m.home, m.ppda_passes, m.ppda_actions) == ("Aston Villa", True, 227, 12)
+    assert (m.oppda_passes, m.deep_allowed, m.conceded) == (146, 6, 0)
+    assert upsert(connect(":memory:"), "team_matches", out["team_matches"]) == 1
+
+
 def test_leagues_for_pool():
     assert understat.leagues_for_pool(["ENG", "NED", "ITA"]) == ["EPL", "Serie_A"]
