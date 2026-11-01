@@ -228,7 +228,23 @@ def cmd_gaps(args: argparse.Namespace) -> int:
     return 0
 
 
-def _search_slot(pool, slot, starter, club, args, roster_ids, strength) -> None:
+def _system_fit(con, club, player_ids) -> pd.Series | None:
+    """Player-team fit scores at the club, when the model is installed,
+    trained and beat its strength-only ablation; otherwise None."""
+    try:
+        from recruit_intel.models import team_fit, team_style
+
+        model, report = team_fit.load()
+        if not team_fit.style_adds_skill(report):
+            return None
+        return team_fit.fit_for_destination(
+            con, model, team_style.load(), player_ids, str(club.source_name("understat"))
+        )
+    except (ImportError, FileNotFoundError, LookupError):
+        return None
+
+
+def _search_slot(pool, slot, starter, club, args, roster_ids, strength, system) -> None:
     role = load_roles()[slot.role]
     pool_countries = args.leagues or club.recruitment.pool
     competitions = [transfermarkt.LEAGUES[c][1] for c in pool_countries
@@ -244,7 +260,9 @@ def _search_slot(pool, slot, starter, club, args, roster_ids, strength) -> None:
         exclude=roster_ids,
     )
     window = club.season_start_year + 1
-    ranked = rank_mod.rank(pool, role, filters, strength, window, budget=max_value)
+    ranked = rank_mod.rank(
+        pool, role, filters, strength, window, budget=max_value, system_fit=system
+    )
 
     # The current starter, scored on the same basis (same window, same discounts).
     base = None
@@ -285,13 +303,19 @@ def cmd_search(args: argparse.Namespace) -> int:
     seasons = list(range(season - args.seasons + 1, season + 1))
     pool = candidate_pool(con, seasons)
     roster_ids = set(profile.squad_roster(con, club).player_id)
+    system = _system_fit(con, club, pool.player_id.tolist())
     window = f"{_season_label(seasons[0])} to {_season_label(seasons[-1])}"
     print(f"{club.club} · market search · stats {window}")
-    print("score = 65% fit (discounted for league and missing data) + 15% age + 10% value"
-          " + 10% contract")  # fmt: skip
+    if system is None:
+        print("score = 65% fit (discounted for league and missing data) + 15% age + 10% value"
+              " + 10% contract")  # fmt: skip
+    else:
+        print("score = 60% fit (discounted for league and missing data) + 5% system fit at "
+              f"{club.club} + 15% age + 10% value + 10% contract")  # fmt: skip
     for key in slots:
         depth = by_slot[key]
-        _search_slot(pool, depth.slot, depth.starter, club, args, roster_ids, league_strength())
+        _search_slot(pool, depth.slot, depth.starter, club, args, roster_ids,
+                     league_strength(), system)  # fmt: skip
     return 0
 
 
