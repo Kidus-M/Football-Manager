@@ -99,6 +99,8 @@ class Projector:
         path = directory / "projector.joblib"
         if not path.exists():
             raise FileNotFoundError("no trained projection model; run `recruit train`")
+        # Safe to unpickle: only ever written by `save` above, into the local,
+        # gitignored data/ directory. Never point this at a downloaded file.
         return joblib.load(path)
 
 
@@ -112,8 +114,6 @@ def train_and_validate(seasons: pd.DataFrame) -> tuple[Projector, dict]:
 
     comps = sorted(seasons.competition_id.unique())
     held_out = Projector(comps).fit(train_pairs)
-    pred = held_out.predict(test_pairs.rename(columns={"from_comp": "competition_id"}),
-                            to_comp=None) if False else None  # fmt: skip
     x_test = test_pairs.rename(columns={"from_comp": "competition_id"})
     report = {"pairs": len(pairs), "train": len(train_pairs), "test": len(test_pairs),
               "moves_in_test": int((test_pairs.from_comp != test_pairs.to_comp).sum()),

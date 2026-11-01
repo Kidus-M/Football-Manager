@@ -21,8 +21,9 @@ def _synthetic(n_per_type=150, seed=0):
     for kind, centre in types.items():
         for i in range(n_per_type):
             vals = np.clip(np.array(centre) * rng.normal(1, 0.12, len(centre)), 0, None)
-            rows.append({"player_id": f"{kind}{i}", "kind": kind, **dict(zip(FEATURES, vals,
-                                                                             strict=True))})
+            rows.append(
+                {"player_id": f"{kind}{i}", "kind": kind, **dict(zip(FEATURES, vals, strict=True))}
+            )
     return pd.DataFrame(rows)
 
 

@@ -24,9 +24,7 @@ def seasons_available(con: duckdb.DuckDBPyConnection) -> list[int]:
     return [r[0] for r in rows]
 
 
-def player_seasons(
-    con: duckdb.DuckDBPyConnection, min_minutes: int = MIN_MINUTES
-) -> pd.DataFrame:
+def player_seasons(con: duckdb.DuckDBPyConnection, min_minutes: int = MIN_MINUTES) -> pd.DataFrame:
     """One row per player, season and competition with enough minutes:
     identity, group, minutes, age at the season's start, FEATURES per 90."""
     parts = []

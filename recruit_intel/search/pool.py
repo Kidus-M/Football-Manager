@@ -6,6 +6,7 @@ strength is applied later, in ranking). A player who played in several
 leagues over the window keeps the league where he played most.
 """
 
+import json
 from datetime import date
 from functools import cache
 from pathlib import Path
@@ -14,15 +15,25 @@ import duckdb
 import pandas as pd
 import yaml
 
-from recruit_intel import CONFIG_DIR
+from recruit_intel import CONFIG_DIR, DATA_DIR
 from recruit_intel.analysis.squad import market_snapshot
 from recruit_intel.features.per90 import per90_table
 from recruit_intel.features.percentiles import percentiles
 
 
+LEARNED_FACTORS = DATA_DIR / "models" / "league_factors.json"
+
+
 @cache
 def league_strength(path: Path = CONFIG_DIR / "leagues.yaml") -> dict[str, float]:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+    """Hand-set strengths, overridden by the projection model's learned
+    factors when `recruit train` has produced them (capped to 0.6-1.0,
+    reference league = 1.0)."""
+    strengths = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if LEARNED_FACTORS.exists():
+        learned = json.loads(LEARNED_FACTORS.read_text())
+        strengths.update({c: min(1.0, max(0.6, f)) for c, f in learned.items()})
+    return strengths
 
 
 def _main_league(df: pd.DataFrame) -> pd.DataFrame:
