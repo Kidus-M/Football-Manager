@@ -15,6 +15,8 @@ py -3.12 -m venv .venv
 .venv/Scripts/recruit squad           # current squad: value, contract, per-90 stats
 .venv/Scripts/recruit profile         # squad strengths, weaknesses and best role (percentiles)
 .venv/Scripts/recruit profile Mainoo Tielemans --radar data/radars/cm.svg   # compare + SVG radar
+.venv/Scripts/recruit gaps --depth    # best XI for the club's formation, cover, recruitment priorities
+.venv/Scripts/recruit gaps --formation 3-4-2-1   # same squad, another shape
 .venv/Scripts/pytest
 ```
 

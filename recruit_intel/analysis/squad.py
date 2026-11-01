@@ -41,7 +41,7 @@ def _per90(con, source: str, season: int, player_ids: list[str]) -> pd.DataFrame
     return per90.assign(minutes=minutes).reset_index()
 
 
-def _market(con, player_ids: list[str]) -> pd.DataFrame:
+def market_snapshot(con, player_ids: list[str]) -> pd.DataFrame:
     """Latest Transfermarkt snapshot per canonical player."""
     return con.execute(
         """
@@ -79,7 +79,7 @@ def current_squad(con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int)
     squad = (
         roster.merge(fpl, on="player_id", how="left")
         .merge(us, on="player_id", how="left")
-        .merge(_market(con, ids), on="player_id", how="left")
+        .merge(market_snapshot(con, ids), on="player_id", how="left")
     )
 
     born = pd.to_datetime(squad["birth_date"])

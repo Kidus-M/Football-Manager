@@ -86,8 +86,10 @@ def find_players(pct: pd.DataFrame, query: str) -> pd.DataFrame:
     return pct[names.map(lambda n: all(w in n.split() or w in n for w in words))]
 
 
-def squad_profile(con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int) -> pd.DataFrame:
-    """One row per squad player: group, qualified, strengths, weaknesses, best role."""
+def squad_percentiles(
+    con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int
+) -> pd.DataFrame:
+    """Percentile rows for the club's squad (its FPL roster); attrs carry min_minutes."""
     squad_ids = (
         con.execute(
             """
@@ -101,9 +103,15 @@ def squad_profile(con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int)
         .df()
         .player_id
     )
-
     pct = peer_percentiles(con, club, season)
-    squad = pct[pct.player_id.isin(squad_ids)]
+    squad = pct[pct.player_id.isin(squad_ids)].reset_index(drop=True)
+    squad.attrs["min_minutes"] = pct.attrs["min_minutes"]
+    return squad
+
+
+def squad_profile(con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int) -> pd.DataFrame:
+    """One row per squad player: group, qualified, strengths, weaknesses, best role."""
+    squad = pct = squad_percentiles(con, club, season)
 
     roles = load_roles()
     rows = []

@@ -16,8 +16,6 @@ from scipy.optimize import linear_sum_assignment
 from recruit_intel.analysis.profile import role_fit
 from recruit_intel.config import Role, Slot
 
-BACKUP_MIN_FIT = 50  # a backup below this isn't real cover
-
 
 @dataclass
 class Candidate:

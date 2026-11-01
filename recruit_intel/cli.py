@@ -1,4 +1,4 @@
-"""Command-line entry point: `recruit ingest | match | squad | profile`."""
+"""Command-line entry point: `recruit ingest | match | squad | profile | gaps`."""
 
 import argparse
 import sys
@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from recruit_intel import DATA_DIR, db
-from recruit_intel.analysis import profile, radar
+from recruit_intel.analysis import gaps, profile, radar
 from recruit_intel.analysis.squad import current_squad
 from recruit_intel.config import load_club, load_roles
 from recruit_intel.features.positions import GROUPS
@@ -170,6 +170,36 @@ def _print_player(row: pd.Series, min_minutes: int) -> None:
     print("  roles: " + (", ".join(f"{roles[f.role].label} {f.score:.0f}" for f in fits) or "-"))
 
 
+def cmd_gaps(args: argparse.Namespace) -> int:
+    club = load_club(args.club)
+    con = db.connect(args.db)
+    season = args.season or _latest_season(con)
+    report, chart = gaps.gap_report(con, club, season, args.formation)
+    formation = args.formation or club.formation
+
+    print(f"{club.club} · {formation} · {_season_label(season)}")
+    print("fit = role fit vs peers, shrunk toward 50 for small samples\n")
+    table = report.assign(issues=report.issues.map(lambda xs: "; ".join(xs) or "-"))
+    cols = ["slot", "role", "starter", "fit", "age", "contract", "cover", "issues"]
+    with pd.option_context("display.width", 250, "display.max_colwidth", 70):
+        print(table[cols].to_string(index=False, na_rep="-"))
+
+    top = gaps.priorities(report)
+    print("\nRecruitment priorities")
+    if top.empty:
+        print("  none: every slot has a solid starter and cover")
+    for i, row in enumerate(top.itertuples(), 1):
+        print(f"  {i}. {row.slot} ({row.role}) [{row.severity}]: {'; '.join(row.issues)}")
+
+    if args.depth:
+        print("\nDepth chart")
+        for d in chart:
+            names = [f"{c.name} {c.adjusted:.0f}" for c in d.backups[:4]]
+            starter = f"{d.starter.name} {d.starter.adjusted:.0f}" if d.starter else "-"
+            print(f"  {d.slot.key:<4} {starter:<28} | " + (", ".join(names) or "-"))
+    return 0
+
+
 def cmd_profile(args: argparse.Namespace) -> int:
     club = load_club(args.club)
     con = db.connect(args.db)
@@ -248,6 +278,12 @@ def main(argv: list[str] | None = None) -> int:
         help="write an SVG radar (overlaying up to 3 players)",
     )
     p_profile.set_defaults(func=cmd_profile)
+
+    p_gaps = sub.add_parser("gaps", help="best XI, depth and recruitment gaps for a formation")
+    p_gaps.add_argument("--formation", help="override the club's formation, e.g. 3-4-2-1")
+    p_gaps.add_argument("--season", type=int)
+    p_gaps.add_argument("--depth", action="store_true", help="also print the depth chart")
+    p_gaps.set_defaults(func=cmd_gaps)
 
     args = parser.parse_args(argv)
     return args.func(args)
