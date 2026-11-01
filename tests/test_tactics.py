@@ -1,7 +1,15 @@
 import pandas as pd
 import pytest
 
-from recruit_intel.analysis.tactics import compare, load_config, reweight
+from recruit_intel.analysis.tactics import (
+    LeverReading,
+    advise,
+    compare,
+    instructions,
+    lever_readings,
+    load_config,
+    reweight,
+)
 from recruit_intel.config import Role, load_roles
 
 CONFIG = {
@@ -34,6 +42,52 @@ def test_shipped_settings_produce_valid_roles():
         for option in options:
             for role in reweight(roles, {lever: option}).values():
                 assert all(w > 0 for w in role.weights.values())
+
+
+STARTERS = pd.DataFrame(
+    [
+        {"name": "Keeper", "group": "GK", "xg_buildup": 20},
+        {"name": "Winger", "group": "W", "tackles": 80, "recoveries": 70, "npxg": 85,
+         "shots": 70, "xa": 30},
+        {"name": "Mid", "group": "CM", "tackles": 75, "recoveries": 85, "xg_buildup": 50},
+        {"name": "Nine", "group": "ST", "tackles": 40, "recoveries": None, "npxg": 30,
+         "shots": 35, "xa": 70},
+    ]
+)  # fmt: skip
+LEVER_CONFIG = {
+    "levers": {
+        "press": {"slots_groups": ["ST", "W", "CM"], "metrics": ["tackles", "recoveries"],
+                  "high_at": 60, "low_at": 40},
+        "finishing": {"slots_groups": ["ST"], "metrics": ["npxg", "shots"],
+                      "high_at": 60, "low_at": 40},
+    }
+}  # fmt: skip
+
+
+def test_lever_readings_average_relevant_starters():
+    readings = {r.lever: r for r in lever_readings(STARTERS, LEVER_CONFIG)}
+    press = readings["press"]
+    assert press.squad == pytest.approx((75 + 80 + 40) / 3)  # missing recovery skipped
+    assert press.verdict == "high" and press.best[0] == "Mid 80"
+    assert readings["finishing"].verdict == "low"
+
+
+@pytest.mark.parametrize(
+    "verdict,style_z,expected",
+    [("high", -0.8, "support a higher press"), ("low", 0.9, "beyond what these players"),
+     ("mid", 0.1, "aligned"), ("high", None, "no style comparison")],
+)  # fmt: skip
+def test_advice(verdict, style_z, expected):
+    r = LeverReading("press", 65.0, verdict, [], [], style_z=style_z)
+    assert expected in advise(r)
+
+
+def test_instructions_fire_on_percentile_rules():
+    said = dict(instructions(STARTERS))
+    assert "build through the centre-backs" in said["Keeper"]
+    assert "inside foot" in said["Winger"]
+    lines = [text for name, text in instructions(STARTERS) if name == "Nine"]
+    assert any("drop" in t for t in lines) and any("few chances" in t for t in lines)
 
 
 def test_compare_lists_only_changed_slots():

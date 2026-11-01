@@ -55,6 +55,31 @@ def reweight(roles: dict[str, Role], choices: dict[str, str], config: dict | Non
     return out
 
 
+def instructions(starters: pd.DataFrame, config: dict | None = None) -> list[tuple[str, str]]:
+    """(player name, instruction) for every rule a starter satisfies, in XI
+    order. Missing metrics never satisfy a condition."""
+    config = config or load_config()
+    out = []
+    for _, row in starters.iterrows():
+        for rule in config["instructions"]:
+            if row["group"] not in rule["groups"]:
+                continue
+            if all(_holds(row.get(metric), cond) for metric, cond in rule["when"].items()):
+                out.append((row["name"], rule["say"].format(name=row["name"])))
+    return out
+
+
+def _holds(value, condition: str) -> bool:
+    if value is None or pd.isna(value):
+        return False
+    op, number = condition[:2], float(condition[2:])
+    if op == ">=":
+        return value >= number
+    if op == "<=":
+        return value <= number
+    raise ValueError(f"condition must start with >= or <=: {condition!r}")
+
+
 @dataclass
 class SlotChange:
     slot: str
@@ -64,6 +89,75 @@ class SlotChange:
     after_fit: float | None
     severity_before: str | None
     severity_after: str | None
+
+
+@dataclass
+class LeverReading:
+    lever: str
+    squad: float | None  # mean percentile of the relevant starters
+    verdict: str  # "high", "mid", "low" or "unknown"
+    best: list[str]  # top contributors, "Name 85"
+    worst: list[str]
+    style_z: float | None = None  # how the team plays now (+ = more of it), adjusted
+    manager_z: float | None = None
+    advice: str = ""
+
+
+# How each lever reads from a strength-adjusted style vector: (feature, sign),
+# sign -1 where a lower value means more of the lever (ppda: fewer passes
+# allowed per action = more pressing).
+STYLE_SIGNAL = {"press": ("ppda", -1), "buildup": ("buildup_share", 1), "finishing": ("npxg", 1)}
+STYLE_HIGH = 0.5  # adjusted z beyond which a team clearly leans one way
+
+
+def lever_readings(starters: pd.DataFrame, config: dict | None = None) -> list[LeverReading]:
+    """starters: percentile rows of the XI (one per player, with `group`)."""
+    config = config or load_config()
+    out = []
+    for lever, spec in config["levers"].items():
+        rows = starters[starters.group.isin(spec["slots_groups"])]
+        metrics = [m for m in spec["metrics"] if m in rows]
+        if rows.empty or not metrics:
+            out.append(LeverReading(lever, None, "unknown", [], []))
+            continue
+        per_player = rows[metrics].mean(axis=1, skipna=True)
+        per_player.index = rows["name"].to_numpy()
+        per_player = per_player.dropna().sort_values(ascending=False)
+        value = float(per_player.mean()) if len(per_player) else None
+        verdict = ("unknown" if value is None else "high" if value >= spec["high_at"]
+                   else "low" if value <= spec["low_at"] else "mid")  # fmt: skip
+        fmt = [f"{n} {v:.0f}" for n, v in per_player.items()]
+        out.append(LeverReading(lever, value, verdict, fmt[:2], fmt[-2:][::-1]))
+    return out
+
+
+def style_lean(z: float | None) -> str:
+    if z is None:
+        return "unknown"
+    return "high" if z >= STYLE_HIGH else "low" if z <= -STYLE_HIGH else "mid"
+
+
+LEVER_WORDS = {
+    "press": ("presses", "a higher press", "a lower block"),
+    "buildup": ("builds up patiently", "patient build-up", "a more direct game"),
+    "finishing": ("creates chances", "more chances for the forwards", "fewer, better chances"),
+}
+
+
+def advise(r: LeverReading) -> str:
+    """One line comparing what the squad supports with how the team plays."""
+    verb, more, less = LEVER_WORDS.get(r.lever, (r.lever, "more", "less"))
+    squad = f"squad {r.squad:.0f}th pct" if r.squad is not None else "squad unknown"
+    team = style_lean(r.style_z)
+    if r.verdict == "unknown" or team == "unknown":
+        return f"{squad}; no style comparison available"
+    if r.verdict == "high" and team != "high":
+        return f"{squad}: the players support {more} than the team currently plays"
+    if r.verdict == "low" and team == "high":
+        return f"{squad}: the team {verb} beyond what these players' numbers support"
+    if r.verdict == "low" and team != "high":
+        return f"{squad}: consistent with {less}; recruit here before asking for more"
+    return f"{squad}: style and squad are aligned"
 
 
 MIN_FIT_CHANGE = 3  # smaller moves are rounding noise, not a tactical effect
