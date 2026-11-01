@@ -37,9 +37,13 @@ def _source_squad(con, source: str, team: str, season: int) -> pd.DataFrame:
     if rows.empty:
         return rows
     ident = ["source_player_id", "name", "position", "birth_date", "minutes"]
-    wide = rows[ident].drop_duplicates("source_player_id").merge(
-        rows.pivot(index="source_player_id", columns="metric", values="value").reset_index(),
-        on="source_player_id",
+    wide = (
+        rows[ident]
+        .drop_duplicates("source_player_id")
+        .merge(
+            rows.pivot(index="source_player_id", columns="metric", values="value").reset_index(),
+            on="source_player_id",
+        )
     )
     for m in metrics:
         if m in wide:
