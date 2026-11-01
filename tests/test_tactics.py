@@ -8,6 +8,7 @@ from recruit_intel.analysis.tactics import (
     instructions,
     lever_readings,
     load_config,
+    ordinal,
     reweight,
 )
 from recruit_intel.config import Role, load_roles
@@ -92,6 +93,30 @@ def test_instructions_fire_on_percentile_rules():
     assert "inside foot" in lines("Winger") and "trigger the press" in lines("Winger")
     assert "drop" in lines("Nine") and "few chances" in lines("Nine")
     assert "Mid" in lines("Mid")  # ball-winner rule (recoveries 85)
+
+
+def test_once_rule_goes_to_the_strongest_starter_only():
+    config = {"instructions": [
+        {"groups": ["CM"], "when": {"xg_buildup": ">=70"}, "once": True, "say": "{name} drops"},
+    ]}  # fmt: skip
+    mids = pd.DataFrame([
+        {"name": "A", "group": "CM", "xg_buildup": 75, "qualified": True, "minutes": 900},
+        {"name": "B", "group": "CM", "xg_buildup": 90, "qualified": False, "minutes": 120},
+    ])  # fmt: skip
+    assert instructions(mids, config) == [("B", "B drops (small sample: 120 min)")]
+
+
+def test_lever_shrinks_small_samples():
+    nine = pd.DataFrame([{"name": "Cameo", "group": "ST", "npxg": 95, "shots": 95,
+                          "minutes": 90}])  # fmt: skip
+    reading = lever_readings(nine, LEVER_CONFIG, min_minutes=270)[1]
+    assert reading.squad == pytest.approx(50 + 45 / 3)  # a third of the way to 95
+    assert reading.worst == []  # one player: no separate weakest list
+
+
+@pytest.mark.parametrize("n,expected", [(93, "93rd"), (11, "11th"), (42, "42nd"), (21, "21st")])
+def test_ordinal(n, expected):
+    assert ordinal(n) == expected
 
 
 def test_compare_lists_only_changed_slots():

@@ -182,7 +182,7 @@ LEVER_WORDS = {
 def advise(r: LeverReading) -> str:
     """One line comparing what the squad supports with how the team plays."""
     verb, more, less = LEVER_WORDS.get(r.lever, (r.lever, "more", "less"))
-    squad = f"squad {r.squad:.0f}th pct" if r.squad is not None else "squad unknown"
+    squad = f"squad {ordinal(r.squad)} pct" if r.squad is not None else "squad unknown"
     team = style_lean(r.style_z)
     if r.verdict == "unknown" or team == "unknown":
         return f"{squad}; no style comparison available"

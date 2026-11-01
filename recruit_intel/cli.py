@@ -371,7 +371,8 @@ def cmd_tactics(args: argparse.Namespace) -> int:
             r.manager_z = lever_z(ctx.manager_z, feature, sign)
         print(f"  {r.lever:<10} {tactics.advise(r)}")
         if r.best:
-            print(f"  {'':<10} strongest: {', '.join(r.best)}; weakest: {', '.join(r.worst)}")
+            weakest = f"; weakest: {', '.join(r.worst)}" if r.worst else ""
+            print(f"  {'':<10} strongest: {', '.join(r.best)}{weakest}")
 
     print("\nPosition by position")
     for _name, text in tactics.instructions(starters):
