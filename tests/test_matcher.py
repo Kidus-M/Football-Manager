@@ -61,6 +61,35 @@ def test_players_missing_from_transfermarkt_link_to_each_other():
     assert m[("fpl", "12")] == m[("understat", "103")] == "fpl-12"
 
 
+def _squad(*names):
+    return pd.DataFrame(
+        [(str(i), n, None, None, "DEF", "VfB Stuttgart", "GER-Bundesliga")
+         for i, n in enumerate(names)],
+        columns=TM.columns,
+    )  # fmt: skip
+
+
+def _understat(name):
+    return pd.DataFrame(
+        [("900", name, "DEF", "VfB Stuttgart", "GER-Bundesliga")], columns=US.columns
+    )
+
+
+def test_unique_surname_in_club_matches_different_first_name():
+    out = build_identity(
+        _squad("Jeff Chabot", "Atakan Karazor"), FPL.iloc[:0], _understat("Julian Chabot")
+    )
+    m = ids_by_source(out)
+    assert m[("understat", "900")] == "tm-0"
+
+
+def test_shared_surname_in_club_does_not_match():
+    out = build_identity(
+        _squad("Jeff Chabot", "Tom Chabot"), FPL.iloc[:0], _understat("Julian Chabot")
+    )
+    assert ids_by_source(out)[("understat", "900")] == "us-900"
+
+
 def test_unmatched_player_keeps_source_id_and_canonical_row():
     out = build_identity(TM, FPL, US)
     assert ids_by_source(out)[("understat", "104")] == "us-104"

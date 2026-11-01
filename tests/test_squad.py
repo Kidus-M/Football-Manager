@@ -18,6 +18,7 @@ def _stats(source, pid, minutes, competition, values):
             "source_player_id": pid,
             "season": 2026,
             "competition_id": competition,
+            "team_name": "Manchester United",
             "minutes": minutes,
             "metric": metric,
             "value": value,
