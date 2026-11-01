@@ -3,7 +3,9 @@
 Percentiles are only meaningful against players doing the same job, so peers
 are grouped by Transfermarkt's detailed position (a right-back is compared
 with full-backs, not with every defender). Each group also lists the metrics
-its radar shows and its strengths/weaknesses are judged on.
+its radar shows and its strengths/weaknesses are judged on. Defensive
+metrics are the ones every league has (API-Football); recoveries come from
+FPL and so only exist for Premier League players.
 """
 
 GROUPS: dict[str, dict] = {
@@ -17,7 +19,7 @@ GROUPS: dict[str, dict] = {
         "label": "Centre-backs",
         "detailed": ["Centre-Back"],
         "broad": "DEF",
-        "metrics": ["cbi", "tackles", "recoveries", "xg_buildup", "xg_chain", "npxg"],
+        "metrics": ["tackles", "interceptions", "blocks", "duels_won", "recoveries", "xg_buildup"],
     },
     "FB": {
         "label": "Full-backs",
@@ -25,8 +27,8 @@ GROUPS: dict[str, dict] = {
         "broad": None,
         "metrics": [
             "tackles",
-            "cbi",
-            "recoveries",
+            "interceptions",
+            "dribbled_past",
             "xa",
             "key_passes",
             "xg_chain",
@@ -37,7 +39,14 @@ GROUPS: dict[str, dict] = {
         "label": "Defensive midfielders",
         "detailed": ["Defensive Midfield"],
         "broad": None,
-        "metrics": ["tackles", "recoveries", "cbi", "xg_buildup", "xg_chain", "key_passes"],
+        "metrics": [
+            "tackles",
+            "interceptions",
+            "duels_won",
+            "recoveries",
+            "xg_buildup",
+            "xg_chain",
+        ],
     },
     "CM": {
         "label": "Central midfielders",
@@ -45,7 +54,7 @@ GROUPS: dict[str, dict] = {
         "broad": "MID",
         "metrics": [
             "tackles",
-            "recoveries",
+            "interceptions",
             "xg_buildup",
             "xg_chain",
             "key_passes",
@@ -57,19 +66,19 @@ GROUPS: dict[str, dict] = {
         "label": "Attacking midfielders",
         "detailed": ["Attacking Midfield"],
         "broad": None,
-        "metrics": ["npxg", "shots", "xa", "key_passes", "xg_chain", "recoveries"],
+        "metrics": ["npxg", "shots", "xa", "key_passes", "xg_chain", "dribbles_completed"],
     },
     "W": {
         "label": "Wingers",
         "detailed": ["Left Winger", "Right Winger"],
         "broad": None,
-        "metrics": ["npxg", "shots", "xa", "key_passes", "xg_chain", "tackles"],
+        "metrics": ["npxg", "shots", "xa", "key_passes", "dribbles_completed", "tackles"],
     },
     "ST": {
         "label": "Strikers",
         "detailed": ["Centre-Forward", "Second Striker"],
         "broad": "FWD",
-        "metrics": ["npxg", "npg", "shots", "xa", "key_passes", "xg_chain"],
+        "metrics": ["npxg", "npg", "shots", "xa", "key_passes", "xg_chain", "duels_won"],
     },
 }
 

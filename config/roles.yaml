@@ -6,6 +6,9 @@
 # `groups` lists the position groups (recruit_intel/features/positions.py:
 # GK, CB, FB, DM, CM, AM, W, ST) whose players are scored for the role.
 # Metric names are the canonical ones in recruit_intel/features/metrics.py.
+# Defensive weights use metrics every league has (API-Football: tackles,
+# interceptions, blocks, duels won, dribbled past); recoveries are FPL-only,
+# so they carry small weights and players elsewhere are scored on the rest.
 
 sweeper_keeper:
   label: Sweeper keeper
@@ -27,17 +30,20 @@ ball_playing_cb:
   groups: [CB]
   weights:
     xg_buildup: 0.35
-    cbi: 0.25
+    interceptions: 0.20
     tackles: 0.15
-    recoveries: 0.25
+    duels_won: 0.15
+    recoveries: 0.15
 
 stopper_cb:
   label: Stopper centre-back
   groups: [CB]
   weights:
-    cbi: 0.40
-    tackles: 0.35
-    recoveries: 0.25
+    tackles: 0.25
+    interceptions: 0.25
+    blocks: 0.20
+    duels_won: 0.20
+    recoveries: 0.10
 
 attacking_wingback:
   label: Attacking wing-back
@@ -46,31 +52,34 @@ attacking_wingback:
     xa: 0.30
     key_passes: 0.25
     xg_chain: 0.25
-    recoveries: 0.10
     tackles: 0.10
+    interceptions: 0.10
 
 defensive_fullback:
   label: Defensive full-back
   groups: [FB]
   weights:
-    tackles: 0.35
-    cbi: 0.35
-    recoveries: 0.30
+    tackles: 0.30
+    interceptions: 0.25
+    dribbled_past: 0.25
+    recoveries: 0.20
 
 ball_winner:
   label: Ball-winning midfielder
   groups: [DM, CM]
   weights:
-    tackles: 0.40
-    recoveries: 0.35
-    cbi: 0.25
+    tackles: 0.35
+    interceptions: 0.25
+    duels_won: 0.20
+    recoveries: 0.20
 
 deep_playmaker:
   label: Deep-lying playmaker
   groups: [DM, CM]
   weights:
     xg_buildup: 0.40
-    recoveries: 0.25
+    interceptions: 0.15
+    recoveries: 0.10
     tackles: 0.15
     key_passes: 0.20
 
@@ -80,8 +89,9 @@ box_to_box:
   weights:
     xg_chain: 0.30
     npxg: 0.15
-    recoveries: 0.25
-    tackles: 0.30
+    tackles: 0.20
+    duels_won: 0.20
+    recoveries: 0.15
 
 creative_10:
   label: Creative No. 10
@@ -96,19 +106,21 @@ wide_playmaker:
   label: Wide playmaker
   groups: [W, AM]
   weights:
-    xa: 0.35
-    key_passes: 0.35
+    xa: 0.30
+    key_passes: 0.30
     xg_chain: 0.20
+    dribbles_completed: 0.10
     shots: 0.10
 
 inside_forward:
   label: Inside forward
   groups: [W, AM]
   weights:
-    npxg: 0.40
+    npxg: 0.35
     shots: 0.20
-    xa: 0.20
-    xg_chain: 0.20
+    xa: 0.15
+    xg_chain: 0.15
+    dribbles_completed: 0.15
 
 complete_forward:
   label: Complete forward

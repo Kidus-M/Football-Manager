@@ -9,11 +9,11 @@
 added_weight: 0.15
 settings:
   press:
-    high: {groups: [ST, W, AM, CM, DM], boost: {tackles: 2.0, recoveries: 2.0}}
-    low: {groups: [ST, W, AM, CM, DM], boost: {tackles: 0.5, recoveries: 0.5}}
+    high: {groups: [ST, W, AM, CM, DM], boost: {tackles: 2.0, interceptions: 1.6, duels_won: 1.6, recoveries: 2.0}}
+    low: {groups: [ST, W, AM, CM, DM], boost: {tackles: 0.5, interceptions: 0.7, duels_won: 0.7, recoveries: 0.5}}
   buildup:
     short: {groups: [GK, CB, FB, DM], boost: {xg_buildup: 2.0}}
-    direct: {groups: [GK, CB, FB, DM], boost: {xg_buildup: 0.3, cbi: 1.5}}
+    direct: {groups: [GK, CB, FB, DM], boost: {xg_buildup: 0.3, blocks: 1.5, duels_won: 1.5}}
   width:
     wide: {groups: [FB, W], boost: {xa: 1.6, key_passes: 1.6}}
     narrow: {groups: [AM, CM], boost: {xa: 1.6, key_passes: 1.6, npxg: 1.3}}
@@ -23,7 +23,7 @@ settings:
 levers:
   press:
     slots_groups: [ST, W, AM, CM, DM]
-    metrics: [tackles, recoveries]
+    metrics: [tackles, interceptions, duels_won, recoveries]
     high_at: 60
     low_at: 40
   buildup:
@@ -58,7 +58,7 @@ instructions:
     when: {xg_buildup: "<=30"}
     say: "{name} should keep it simple: short passes to the holding midfielder"
   - groups: [CB]
-    when: {cbi: "<=30", tackles: "<=40"}
+    when: {interceptions: "<=30", blocks: "<=35", tackles: "<=40"}
     say: "{name} is exposed defending his box: protect him with a deeper line or a screening midfielder"
   - groups: [FB]
     when: {xa: ">=65"}
@@ -66,6 +66,12 @@ instructions:
   - groups: [FB]
     when: {xa: "<=35", tackles: ">=60"}
     say: "{name} is a defensive full-back: keep him deeper and let the winger hold the width"
+  - groups: [FB]
+    when: {dribbled_past: "<=25"}
+    say: "{name} is beaten one-on-one often: keep a midfielder close to double up"
+  - groups: [DM, CM]
+    when: {interceptions: ">=75"}
+    say: "{name} reads the game: let him hold the space in front of the back line"
   - groups: [DM, CM]
     when: {recoveries: ">=70"}
     say: "{name} wins the ball back: use him to screen and to step into the press"
