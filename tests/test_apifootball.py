@@ -7,10 +7,10 @@ from recruit_intel.ingest import apifootball as af
 from recruit_intel.ingest.http import CachedClient
 
 
-def _stat(team, minutes, tackles, interceptions, past):
+def _stat(team, minutes, tackles, interceptions, past, team_id=1, league_id=39):
     return {
-        "team": {"id": 1, "name": team},
-        "league": {"id": 39, "season": 2026},
+        "team": {"id": team_id, "name": team},
+        "league": {"id": league_id, "season": 2026},
         "games": {"minutes": minutes, "position": "Defender"},
         "tackles": {"total": tackles, "blocks": 1, "interceptions": interceptions},
         "duels": {"total": 20, "won": 12},
@@ -29,8 +29,8 @@ PAGE = {
                        "nationality": "France"},
             # Moved mid-season: both clubs' entries count.
             "statistics": [
-                _stat("Lille", 450, 10, 4, 2),
-                _stat("Manchester United", 450, 8, None, 1),
+                _stat("Lille", 450, 10, 4, 2, team_id=79),
+                _stat("Manchester United", 450, 8, None, 1, team_id=33),
             ],
         },
         {"player": {"id": 6, "name": "Unused"}, "statistics": [_stat("X", None, 0, 0, 0)]},
@@ -48,6 +48,40 @@ def test_parse_sums_entries_and_skips_players_without_minutes():
     assert stats.loc["tackles"].value == 18 and stats.loc["tackles"].minutes == 900
     assert stats.loc["interceptions"].value == 4  # the unrecorded entry adds nothing
     assert stats.loc["dribbled_past"].value == 3
+
+
+def test_only_this_leagues_entries_count_and_duplicates_merge():
+    cup = _stat("Manchester United", 270, 50, 50, 50, team_id=33, league_id=45)
+    page = json.loads(json.dumps(PAGE))
+    page["response"][0]["statistics"].append(cup)
+    # The same player, seen again from his other club's squad pages.
+    again = {"response": [page["response"][0]]}
+    stats = af.parse([page, again], "ENG-Premier League", 2026, league_id=39)["player_season_stats"]
+    row = stats.set_index("metric").loc["tackles"]
+    assert row.value == 18 and row.minutes == 900  # cup excluded, no double count
+
+
+def test_ingest_league_fetches_club_by_club(tmp_path):
+    def handler(request):
+        path, params = request.url.path, request.url.params
+        if path.endswith("/teams"):
+            return httpx.Response(
+                200,
+                json={
+                    "errors": [],
+                    "response": [
+                        {"team": {"id": 79, "name": "Lille"}},
+                        {"team": {"id": 33, "name": "Man Utd"}},
+                    ],
+                },
+            )
+        assert "league" not in params  # never the page-capped league listing
+        return httpx.Response(200, json={**PAGE, "paging": {"current": 1, "total": 1}})
+
+    client = CachedClient("af", cache_dir=tmp_path, min_interval=0)
+    client._client = httpx.Client(transport=httpx.MockTransport(handler))
+    out = af.ingest_league(client, "ENG", 2026)
+    assert list(out["source_players"].source_player_id) == ["5"]
 
 
 def test_field_never_recorded_is_missing_not_zero():

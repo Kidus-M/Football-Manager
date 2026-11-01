@@ -4,8 +4,9 @@ The only free, permitted source we found with tackles, interceptions, blocks,
 duels and dribbled-past for players outside the Premier League. Needs a key
 (free plan: 100 requests a day) in `.env` as API_FOOTBALL_KEY.
 
-/players returns 20 players per page, so a league-season is ~30-40 pages and
-the five leagues take about two days of the free quota. Every page is cached
+Players are fetched club by club (/teams, then /players?team=, ~2 pages a
+squad) because the free plan refuses /players pages past 3; the top five
+leagues take ~200 requests, about two days of the free quota. Every page is cached
 on disk, so a rerun only spends requests on pages not fetched yet: run
 `recruit ingest --apifootball` once a day until it reports nothing left.
 
@@ -91,8 +92,12 @@ def make_client(key: str, ttl: float = 7 * DAY) -> CachedClient:
     return CachedClient(SOURCE, ttl=ttl, min_interval=6.5, headers={"x-apisports-key": key})
 
 
-def fetch_page(client: CachedClient, league_id: int, season: int, page: int) -> dict:
-    url, params = f"{BASE}/players", {"league": league_id, "season": season, "page": page}
+MAX_FREE_PAGE = 3  # the free plan refuses page > 3 on /players
+
+
+def _get(client: CachedClient, path: str, params: dict) -> dict:
+    """GET an endpoint; API errors (HTTP 200 + `errors`) raise and are never cached."""
+    url = f"{BASE}/{path}"
     body = json.loads(client.get_text(url, params))
     errors = body.get("errors")
     if errors:  # never keep an error response in the cache
@@ -104,6 +109,26 @@ def fetch_page(client: CachedClient, league_id: int, season: int, page: int) -> 
             raise QuotaExhausted(text)
         raise RuntimeError(f"API-Football error: {text}")
     return body
+
+
+def fetch_page(client: CachedClient, league_id: int, season: int, page: int) -> dict:
+    """One page of a league's /players (20 players). Paid plans only past page 3."""
+    return _get(client, "players", {"league": league_id, "season": season, "page": page})
+
+
+def fetch_teams(client: CachedClient, league_id: int, season: int) -> list[dict]:
+    body = _get(client, "teams", {"league": league_id, "season": season})
+    return [entry["team"] for entry in body.get("response", [])]
+
+
+def fetch_team_players(client: CachedClient, team_id: int, season: int) -> list[dict]:
+    """All /players pages for one club-season (a squad is ~2 pages)."""
+    params = {"team": team_id, "season": season}
+    pages = [_get(client, "players", {**params, "page": 1})]
+    total = int((pages[0].get("paging") or {}).get("total") or 1)
+    for page in range(2, min(total, MAX_FREE_PAGE) + 1):
+        pages.append(_get(client, "players", {**params, "page": page}))
+    return pages
 
 
 def _plan_file(client: CachedClient) -> Path:
@@ -123,7 +148,7 @@ def usable_season(client: CachedClient, wanted: int) -> int:
             return latest
     league_id = LEAGUES["ENG"][0]
     try:
-        fetch_page(client, league_id, wanted, 1)
+        fetch_teams(client, league_id, wanted)
         return wanted
     except PlanRestricted as exc:
         if exc.latest is None or exc.latest >= wanted:
@@ -140,65 +165,74 @@ def _num(value) -> float | None:
     return float(str(value).rstrip("%"))
 
 
-def parse(pages: list[dict], competition: str, season: int) -> dict[str, pd.DataFrame]:
+def parse(pages: list[dict], competition: str, season: int,
+          league_id: int | None = None) -> dict[str, pd.DataFrame]:  # fmt: skip
     """/players responses -> source_players and long-form season totals.
 
-    A player's statistics list has one entry per team-competition; only
-    entries for this league count, summed over teams (mid-season moves)."""
-    players, stats = [], []
+    A player's statistics list has one entry per team-competition. Fetched
+    per club, it also holds cups and European games, and a player who moved
+    mid-season appears under both clubs; so entries are merged per player,
+    de-duplicated by (team, league), and only `league_id`'s are summed."""
+    merged: dict[str, tuple[dict, dict]] = {}
     for body in pages:
         for item in body.get("response", []):
             p = item["player"]
-            pid = str(p["id"])
-            entries = [s for s in item.get("statistics", [])
-                       if (s.get("games") or {}).get("minutes")]  # fmt: skip
-            if not entries:
+            _, entries = merged.setdefault(str(p["id"]), (p, {}))
+            for s in item.get("statistics", []):
+                lid = (s.get("league") or {}).get("id")
+                if league_id is not None and lid != league_id:
+                    continue
+                entries[((s.get("team") or {}).get("id"), lid)] = s
+
+    players, stats = [], []
+    for pid, (p, by_key) in merged.items():
+        entries = [s for s in by_key.values() if (s.get("games") or {}).get("minutes")]
+        if not entries:
+            continue
+        minutes = sum(int(s["games"]["minutes"]) for s in entries)
+        latest = entries[-1]
+        players.append(
+            {
+                "source": SOURCE,
+                "source_player_id": pid,
+                "name": p.get("name") or f"{p.get('firstname', '')} {p.get('lastname', '')}",
+                "team_name": latest["team"]["name"],
+                "position": POSITIONS.get(latest["games"].get("position")),
+                "birth_date": (p.get("birth") or {}).get("date"),
+                "nationality": p.get("nationality"),
+            }
+        )
+        team = ",".join(dict.fromkeys(s["team"]["name"] for s in entries))
+        for (section, field), metric in METRIC_FIELDS.items():
+            values = [_num((s.get(section) or {}).get(field)) for s in entries]
+            recorded = [v for v in values if v is not None]
+            if not recorded:  # not tracked for this player: missing, not zero
                 continue
-            minutes = sum(int(s["games"]["minutes"]) for s in entries)
-            latest = entries[-1]
-            players.append(
+            stats.append(
                 {
                     "source": SOURCE,
                     "source_player_id": pid,
-                    "name": p.get("name") or f"{p.get('firstname', '')} {p.get('lastname', '')}",
-                    "team_name": latest["team"]["name"],
-                    "position": POSITIONS.get(latest["games"].get("position")),
-                    "birth_date": (p.get("birth") or {}).get("date"),
-                    "nationality": p.get("nationality"),
+                    "season": season,
+                    "competition_id": competition,
+                    "team_name": team,
+                    "minutes": minutes,
+                    "metric": metric,
+                    "value": sum(recorded),
                 }
             )
-            team = ",".join(dict.fromkeys(s["team"]["name"] for s in entries))
-            for (section, field), metric in METRIC_FIELDS.items():
-                values = [_num((s.get(section) or {}).get(field)) for s in entries]
-                recorded = [v for v in values if v is not None]
-                if not recorded:  # not tracked for this player: missing, not zero
-                    continue
-                total = sum(recorded)
-                stats.append(
-                    {
-                        "source": SOURCE,
-                        "source_player_id": pid,
-                        "season": season,
-                        "competition_id": competition,
-                        "team_name": team,
-                        "minutes": minutes,
-                        "metric": metric,
-                        "value": total,
-                    }
-                )
-    players_df = pd.DataFrame(players).drop_duplicates("source_player_id", keep="last")
+    players_df = pd.DataFrame(players)
     if not players_df.empty:
         players_df["birth_date"] = pd.to_datetime(players_df["birth_date"], errors="coerce").dt.date
     return {"source_players": players_df, "player_season_stats": pd.DataFrame(stats)}
 
 
 def ingest_league(client: CachedClient, country: str, season: int) -> dict[str, pd.DataFrame]:
-    """All pages of one league-season. Raises QuotaExhausted part-way; pages
-    fetched so far stay cached, so the next run continues from there."""
+    """Every club's squad pages for one league-season (the free plan caps
+    league-wide paging at 3 pages, so clubs are fetched one by one). Raises
+    QuotaExhausted part-way; pages fetched so far stay cached, so the next
+    run continues from there."""
     league_id, competition = LEAGUES[country]
-    first = fetch_page(client, league_id, season, 1)
-    pages = [first]
-    total = int((first.get("paging") or {}).get("total") or 1)
-    for page in range(2, total + 1):
-        pages.append(fetch_page(client, league_id, season, page))
-    return parse(pages, competition, season)
+    pages = []
+    for team in fetch_teams(client, league_id, season):
+        pages.extend(fetch_team_players(client, team["id"], season))
+    return parse(pages, competition, season, league_id=league_id)
