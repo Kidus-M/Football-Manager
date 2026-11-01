@@ -1,0 +1,31 @@
+club: Manchester United
+competition: ENG-Premier League
+season: 2026-27
+formation: TBD            # e.g. 3-4-2-1 or 4-2-3-1
+roles:                     # role per formation slot
+  GK: sweeper_keeper
+  RCB: ball_playing_cb
+  LWB: attacking_wingback
+  DM: deep_playmaker
+  AM: creative_10
+  ST: complete_forward
+recruitment:
+  pool: [ENG, ESP, ITA, GER, FRA, NED, POR, BEL]
+  max_age: 27
+  max_value_eur: TBD
+  min_minutes: 900
+peer_group: ENG-Premier League   # percentiles computed against this
+
+# How each free source names this club. The core code never hard-codes a club;
+# adapters look the club up through these keys.
+source_names:
+  fpl: Man Utd
+  understat: Manchester United
+  clubelo: ManUnited
+  transfermarkt_id: 985
+
+# UI theming: switching club re-skins the app.
+theme:
+  accent: "#DA291C"
+  secondary: "#FBE122"
+  ink: "#000000"

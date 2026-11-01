@@ -1,0 +1,102 @@
+# Shared role library. Every club config picks roles from here by key.
+#
+# A role is a weighted stat profile over per-90 metrics. Weights are relative
+# (normalised at scoring time); a negative weight means lower is better.
+# `positions` lists the broad positions a player must be listed at to be
+# scored for the role. Metric names are the canonical ones defined in
+# recruit_intel/features/metrics.py.
+
+sweeper_keeper:
+  label: Sweeper keeper
+  positions: [GK]
+  weights:
+    saves: 0.35
+    goals_conceded: -0.25
+    xg_buildup: 0.40
+
+shot_stopper:
+  label: Shot stopper
+  positions: [GK]
+  weights:
+    saves: 0.60
+    goals_conceded: -0.40
+
+ball_playing_cb:
+  label: Ball-playing centre-back
+  positions: [DEF]
+  weights:
+    xg_buildup: 0.35
+    cbi: 0.25
+    tackles: 0.15
+    recoveries: 0.25
+
+stopper_cb:
+  label: Stopper centre-back
+  positions: [DEF]
+  weights:
+    cbi: 0.40
+    tackles: 0.35
+    recoveries: 0.25
+
+attacking_wingback:
+  label: Attacking wing-back
+  positions: [DEF, MID]
+  weights:
+    xa: 0.30
+    key_passes: 0.25
+    xg_chain: 0.25
+    recoveries: 0.10
+    tackles: 0.10
+
+deep_playmaker:
+  label: Deep-lying playmaker
+  positions: [MID]
+  weights:
+    xg_buildup: 0.40
+    recoveries: 0.25
+    tackles: 0.15
+    key_passes: 0.20
+
+box_to_box:
+  label: Box-to-box midfielder
+  positions: [MID]
+  weights:
+    xg_chain: 0.30
+    npxg: 0.15
+    recoveries: 0.25
+    tackles: 0.30
+
+creative_10:
+  label: Creative No. 10
+  positions: [MID, FWD]
+  weights:
+    xa: 0.35
+    key_passes: 0.30
+    xg_chain: 0.20
+    npxg: 0.15
+
+inside_forward:
+  label: Inside forward
+  positions: [MID, FWD]
+  weights:
+    npxg: 0.40
+    shots: 0.20
+    xa: 0.20
+    xg_chain: 0.20
+
+complete_forward:
+  label: Complete forward
+  positions: [FWD]
+  weights:
+    npxg: 0.45
+    shots: 0.15
+    xa: 0.20
+    xg_chain: 0.20
+
+poacher:
+  label: Poacher
+  positions: [FWD]
+  weights:
+    npxg: 0.60
+    shots: 0.25
+    npg: 0.15
