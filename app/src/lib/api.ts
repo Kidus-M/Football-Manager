@@ -10,6 +10,7 @@ export type Club = {
   formation: string | null;
   peer_group: string;
   theme: { accent: string; secondary: string | null; ink: string | null } | null;
+  recruitment: { pool: string[]; max_age: number; max_value_eur: number | null; min_minutes: number };
   formations: string[];
 };
 
