@@ -84,6 +84,18 @@ def test_ingest_league_fetches_club_by_club(tmp_path):
     assert list(out["source_players"].source_player_id) == ["5"]
 
 
+def test_stat_line_duplicated_across_clubs_is_dropped():
+    # The same league stat line under two clubs: more minutes than a season.
+    dup = {"player": {"id": 1165, "name": "Youth Player"}, "statistics": [
+        _stat("Manchester United", 2600, 30, 20, 5, team_id=33),
+        _stat("Wolves", 2603, 30, 20, 5, team_id=39),
+    ]}  # fmt: skip
+    out = af.parse([{"response": [dup, *PAGE["response"]]}], "ENG-Premier League", 2024,
+                   league_id=39)  # fmt: skip
+    assert "1165" not in set(out["source_players"].source_player_id)
+    assert "5" in set(out["source_players"].source_player_id)  # a genuine move is kept
+
+
 def test_field_never_recorded_is_missing_not_zero():
     page = json.loads(json.dumps(PAGE))
     for s in page["response"][0]["statistics"]:

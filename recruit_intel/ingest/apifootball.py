@@ -94,6 +94,7 @@ def make_client(key: str, ttl: float = 7 * DAY) -> CachedClient:
 
 
 MAX_FREE_PAGE = 3  # the free plan refuses page > 3 on /players
+MAX_LEAGUE_MINUTES = 38 * 90 + 300  # a full league season plus stoppage time
 
 
 def _get(client: CachedClient, path: str, params: dict) -> dict:
@@ -197,6 +198,12 @@ def parse(pages: list[dict], competition: str, season: int,
         if not entries:
             continue
         minutes = sum(int(s["games"]["minutes"]) for s in entries)
+        if minutes > MAX_LEAGUE_MINUTES:
+            # API-Football sometimes attaches one stat line to two clubs (seen:
+            # a youth player with 2,600 league minutes at each). A real
+            # mid-season move can't add up to more than a season, so the
+            # record is conflicting: better missing than wrong.
+            continue
         latest = entries[-1]
         players.append(
             {
