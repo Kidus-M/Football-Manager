@@ -1,10 +1,9 @@
 """Current-squad table for the configured club.
 
-Joins the club's FPL players (positions, birth dates, defensive counts) with
-its Understat players (xG family) and Transfermarkt players (market value,
-contract). Until the identity module lands, the join is a within-club
-name-token match, confirmed by birth date where both sides have one. That is
-reliable for one squad of ~30 but not for league-wide matching.
+The squad is the club's FPL roster (it lists every registered player). Each
+player's Understat stats and Transfermarkt market data are joined through
+the canonical player_id from identity matching, so they follow the player
+rather than the club name.
 """
 
 from datetime import date
@@ -13,7 +12,6 @@ import duckdb
 import pandas as pd
 
 from recruit_intel.config import ClubConfig
-from recruit_intel.identity.names import tokens
 
 PER90_METRICS = {
     "fpl": ["tackles", "cbi", "recoveries", "saves"],
@@ -21,109 +19,78 @@ PER90_METRICS = {
 }
 
 
-def _source_squad(con, source: str, team: str, season: int) -> pd.DataFrame:
-    """One row per player: identity columns, minutes, and per-90 metrics."""
-    metrics = PER90_METRICS[source]
+def _per90(con, source: str, season: int, player_ids: list[str]) -> pd.DataFrame:
+    """Per-90 metrics by canonical player, summed across competitions played."""
     rows = con.execute(
         """
-        SELECT p.source_player_id, p.name, p.position, p.birth_date,
-               s.minutes, s.metric, s.value
+        SELECT ids.player_id, s.competition_id, s.minutes, s.metric, s.value
         FROM player_season_stats s
-        JOIN source_players p USING (source, source_player_id)
-        WHERE s.source = ? AND s.season = ? AND p.team_name = ?
-          AND s.metric IN (SELECT unnest(?))
+        JOIN player_source_ids ids USING (source, source_player_id)
+        WHERE s.source = ? AND s.season = ? AND s.metric IN (SELECT unnest(?))
+          AND ids.player_id IN (SELECT unnest(?))
         """,
-        [source, season, team, metrics],
+        [source, season, PER90_METRICS[source], player_ids],
     ).df()
     if rows.empty:
-        return rows
-    ident = ["source_player_id", "name", "position", "birth_date", "minutes"]
-    wide = (
-        rows[ident]
-        .drop_duplicates("source_player_id")
-        .merge(
-            rows.pivot(index="source_player_id", columns="metric", values="value").reset_index(),
-            on="source_player_id",
-        )
+        return pd.DataFrame(columns=["player_id", "minutes", *PER90_METRICS[source]])
+    minutes = (
+        rows.drop_duplicates(["player_id", "competition_id"]).groupby("player_id").minutes.sum()
     )
-    for m in metrics:
-        if m in wide:
-            wide[m] = (wide[m] / wide["minutes"] * 90).where(wide["minutes"] > 0)
-    return wide
+    totals = rows.groupby(["player_id", "metric"]).value.sum().unstack()
+    per90 = totals.div(minutes, axis=0).mul(90).where(minutes > 0, axis=0)
+    return per90.assign(minutes=minutes).reset_index()
 
 
-def _transfermarkt_squad(con, club_id: str) -> pd.DataFrame:
-    """Latest market snapshot for each of the club's Transfermarkt players."""
+def _market(con, player_ids: list[str]) -> pd.DataFrame:
+    """Latest Transfermarkt snapshot per canonical player."""
     return con.execute(
         """
-        SELECT p.name, p.birth_date, p.detailed_position, m.value_eur, m.contract_end
-        FROM source_players p
-        JOIN market m USING (source, source_player_id)
-        WHERE p.source = 'transfermarkt' AND p.team_id = ?
-        QUALIFY row_number() OVER (PARTITION BY p.source_player_id
+        SELECT ids.player_id, p.detailed_position, m.value_eur, m.contract_end
+        FROM market m
+        JOIN source_players p USING (source, source_player_id)
+        JOIN player_source_ids ids USING (source, source_player_id)
+        WHERE m.source = 'transfermarkt' AND ids.player_id IN (SELECT unnest(?))
+        QUALIFY row_number() OVER (PARTITION BY ids.player_id
                                    ORDER BY m.snapshot_date DESC) = 1
         """,
-        [club_id],
+        [player_ids],
     ).df()
-
-
-def _match(left: pd.DataFrame, right: pd.DataFrame) -> dict[int, int]:
-    """Left row index -> right row index, by name-token overlap.
-
-    When both rows carry a birth date, it must agree, and agreement breaks
-    ties between players who share name tokens.
-    """
-    has_dob = "birth_date" in left and "birth_date" in right
-    out: dict[int, int] = {}
-    taken: set[int] = set()
-    for i, lrow in left.iterrows():
-        a = tokens(lrow["name"])
-        best, best_score = None, 0.0
-        for j, rrow in right.iterrows():
-            if j in taken:
-                continue
-            b = tokens(rrow["name"])
-            score = len(a & b) / min(len(a), len(b))
-            if has_dob and pd.notna(lrow["birth_date"]) and pd.notna(rrow["birth_date"]):
-                if pd.Timestamp(lrow["birth_date"]) != pd.Timestamp(rrow["birth_date"]):
-                    continue
-                score += 1
-            if score > best_score:
-                best, best_score = j, score
-        if best is not None and best_score >= 0.5:
-            out[i] = best
-            taken.add(best)
-    return out
 
 
 def current_squad(con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int) -> pd.DataFrame:
-    fpl = _source_squad(con, "fpl", str(club.source_name("fpl")), season)
-    if fpl.empty:
-        raise LookupError(f"no FPL rows for {club.club} in {season}; run `recruit ingest` first")
-    us = _source_squad(con, "understat", str(club.source_name("understat")), season)
+    roster = con.execute(
+        """
+        SELECT ids.player_id, pl.name, pl.position, pl.birth_date
+        FROM source_players p
+        JOIN player_source_ids ids USING (source, source_player_id)
+        JOIN players pl USING (player_id)
+        WHERE p.source = 'fpl' AND p.team_name = ?
+        """,
+        [str(club.source_name("fpl"))],
+    ).df()
+    if roster.empty:
+        raise LookupError(
+            f"no matched FPL players for {club.club}; run `recruit ingest` (or `recruit match`)"
+        )
+    ids = roster.player_id.tolist()
 
-    us_cols = [m for m in PER90_METRICS["understat"] if m in us]
-    joined = fpl.copy()
-    for col in us_cols:
-        joined[col] = float("nan")
-    if not us.empty:
-        for i, j in _match(fpl, us).items():
-            joined.loc[i, us_cols] = us.loc[j, us_cols].to_numpy()
+    fpl = _per90(con, "fpl", season, ids)
+    us = _per90(con, "understat", season, ids).drop(columns="minutes")
+    squad = (
+        roster.merge(fpl, on="player_id", how="left")
+        .merge(us, on="player_id", how="left")
+        .merge(_market(con, ids), on="player_id", how="left")
+    )
 
-    tm = _transfermarkt_squad(con, str(club.source_name("transfermarkt_id")))
-    tm_cols = ["detailed_position", "value_eur", "contract_end"]
-    for col in tm_cols:
-        joined[col] = None
-    for i, j in _match(fpl, tm).items():
-        joined.loc[i, tm_cols] = tm.loc[j, tm_cols].to_numpy()
-    joined["value_m_eur"] = pd.to_numeric(joined["value_eur"]) / 1e6
-    joined["contract"] = pd.to_datetime(joined["contract_end"]).dt.year.astype("Int64")
+    born = pd.to_datetime(squad["birth_date"])
+    squad["age"] = ((pd.Timestamp(date.today()) - born).dt.days // 365.25).astype("Int64")
+    squad["value_m_eur"] = pd.to_numeric(squad["value_eur"]) / 1e6
+    squad["contract"] = pd.to_datetime(squad["contract_end"]).dt.year.astype("Int64")
+    squad["minutes"] = squad["minutes"].fillna(0).astype(int)
 
-    born = pd.to_datetime(joined["birth_date"])
-    joined["age"] = ((pd.Timestamp(date.today()) - born).dt.days // 365.25).astype("Int64")
     order = {"GK": 0, "DEF": 1, "MID": 2, "FWD": 3}
-    joined = joined.sort_values(
-        ["position", "minutes"], key=lambda s: s.map(order) if s.name == "position" else -s
+    squad = squad.assign(_pos=squad.position.map(order)).sort_values(
+        ["_pos", "minutes"], ascending=[True, False]
     )
     cols = [
         "name",
@@ -133,7 +100,7 @@ def current_squad(con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int)
         "value_m_eur",
         "contract",
         "minutes",
-        *us_cols,
+        *PER90_METRICS["understat"],
         *PER90_METRICS["fpl"],
     ]
-    return joined[[c for c in cols if c in joined]].reset_index(drop=True)
+    return squad.reindex(columns=cols).reset_index(drop=True)
