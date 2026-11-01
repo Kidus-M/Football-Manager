@@ -1,4 +1,5 @@
-"""Command-line entry point: `recruit ingest | match | squad | profile | gaps | search`."""
+"""Command-line entry point: `recruit ingest | match | squad | profile | gaps | search |
+tactics` (ML commands are in cli_models.py)."""
 
 import argparse
 import sys
@@ -8,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from recruit_intel import DATA_DIR, cli_models, db
-from recruit_intel.analysis import gaps, profile, radar
+from recruit_intel.analysis import gaps, profile, radar, tactics
 from recruit_intel.analysis.squad import current_squad
 from recruit_intel.config import load_club, load_roles
 from recruit_intel.features.positions import GROUPS
@@ -322,6 +323,81 @@ def cmd_search(args: argparse.Namespace) -> int:
     return 0
 
 
+def _style_context(con, club):
+    """Club style and manager context, or None without the ml extra / models."""
+    try:
+        from recruit_intel.models.club_context import club_context
+
+        return club_context(con, club)
+    except (ImportError, FileNotFoundError, LookupError):
+        return None
+
+
+def cmd_tactics(args: argparse.Namespace) -> int:
+    club = load_club(args.club)
+    con = db.connect(args.db)
+    season = _latest_season(con)
+    formation = args.formation or club.formation
+    report, chart = gaps.gap_report(con, club, season, args.formation)
+    squad = profile.squad_percentiles(con, club, season).set_index("player_id")
+    starter_ids = [d.starter.player_id for d in chart if d.starter]
+    starters = squad.loc[starter_ids].reset_index()
+
+    print(f"{club.club} · {formation} · tactics, {_season_label(season)}")
+    print("Rule-based (config/tactics.yaml): reasoning over percentiles vs league peers, "
+          "not a model of results.\n")  # fmt: skip
+
+    ctx = _style_context(con, club)
+    if ctx is not None:
+        print(f"How {ctx.team} plays now ({_season_label(ctx.season)}, adjusted for "
+              f"strength): {ctx.traits}")  # fmt: skip
+        if ctx.manager:
+            if ctx.manager_signature:
+                caveat = ("" if (ctx.manager_clubs or 0) > 1
+                          else " (one club so far: partly that squad's style)")  # fmt: skip
+                print(f"Manager {ctx.manager}: {ctx.manager_signature}, over "
+                      f"{ctx.manager_matches} matches{caveat}")  # fmt: skip
+            else:
+                print(f"Manager {ctx.manager}: too few top-five-league matches to profile")
+        print()
+
+    print("What the XI is suited to")
+    for r in tactics.lever_readings(starters):
+        if ctx is not None and r.lever in tactics.STYLE_SIGNAL:
+            from recruit_intel.models.club_context import lever_z
+
+            feature, sign = tactics.STYLE_SIGNAL[r.lever]
+            r.style_z = lever_z(ctx.style_z, feature, sign)
+            r.manager_z = lever_z(ctx.manager_z, feature, sign)
+        print(f"  {r.lever:<10} {tactics.advise(r)}")
+        if r.best:
+            print(f"  {'':<10} strongest: {', '.join(r.best)}; weakest: {', '.join(r.worst)}")
+
+    print("\nPosition by position")
+    for _name, text in tactics.instructions(starters):
+        print(f"  - {text}")
+    unrated = [d.slot.key for d in chart if d.starter is None]
+    if unrated:
+        print(f"  (no rated starter for {', '.join(unrated)})")
+
+    choices = {k: v for k, v in (("press", args.press), ("buildup", args.buildup),
+                                 ("width", args.width)) if v}  # fmt: skip
+    if choices:
+        label = ", ".join(f"{k} {v}" for k, v in choices.items())
+        roles = tactics.reweight(load_roles(), choices)
+        what_if, _ = gaps.gap_report(con, club, season, args.formation, roles=roles)
+        print(f"\nWhat if: {label} (roles reweighted; a rule-based simulation)")
+        changes = tactics.compare(report, what_if)
+        if not changes:
+            print("  no change to the XI or its gaps")
+        for c in changes:
+            sev = (f" [{c.severity_before or 'ok'} -> {c.severity_after or 'ok'}]"
+                   if c.severity_before != c.severity_after else "")  # fmt: skip
+            who = c.before if c.before == c.after else f"{c.before} -> {c.after}"
+            print(f"  {c.slot:<4} {who}: fit {c.before_fit} -> {c.after_fit}{sev}")
+    return 0
+
+
 def cmd_profile(args: argparse.Namespace) -> int:
     club = load_club(args.club)
     con = db.connect(args.db)
@@ -429,6 +505,13 @@ def main(argv: list[str] | None = None) -> int:
         "--upgrades", action="store_true", help="only candidates whose fit beats the starter's"
     )
     p_search.set_defaults(func=cmd_search)
+
+    p_tac = sub.add_parser("tactics", help="how the squad should play, with tactical what-ifs")
+    p_tac.add_argument("--formation")
+    p_tac.add_argument("--press", choices=["high", "low"])
+    p_tac.add_argument("--buildup", choices=["short", "direct"])
+    p_tac.add_argument("--width", choices=["wide", "narrow"])
+    p_tac.set_defaults(func=cmd_tactics)
 
     cli_models.register(sub)
 

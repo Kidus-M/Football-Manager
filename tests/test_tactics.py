@@ -83,11 +83,15 @@ def test_advice(verdict, style_z, expected):
 
 
 def test_instructions_fire_on_percentile_rules():
-    said = dict(instructions(STARTERS))
-    assert "build through the centre-backs" in said["Keeper"]
-    assert "inside foot" in said["Winger"]
-    lines = [text for name, text in instructions(STARTERS) if name == "Nine"]
-    assert any("drop" in t for t in lines) and any("few chances" in t for t in lines)
+    said = instructions(STARTERS)
+
+    def lines(who):
+        return " | ".join(text for name, text in said if name == who)
+
+    assert "build through the centre-backs" in lines("Keeper")
+    assert "inside foot" in lines("Winger") and "trigger the press" in lines("Winger")
+    assert "drop" in lines("Nine") and "few chances" in lines("Nine")
+    assert "Mid" in lines("Mid")  # ball-winner rule (recoveries 85)
 
 
 def test_compare_lists_only_changed_slots():
