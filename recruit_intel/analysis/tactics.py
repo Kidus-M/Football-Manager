@@ -66,11 +66,28 @@ class SlotChange:
     severity_after: str | None
 
 
+MIN_FIT_CHANGE = 3  # smaller moves are rounding noise, not a tactical effect
+
+
+def _missing(x) -> bool:
+    return x is None or (isinstance(x, float) and pd.isna(x))
+
+
+def _same(a, b) -> bool:
+    return (_missing(a) and _missing(b)) or a == b
+
+
 def compare(base: pd.DataFrame, what_if: pd.DataFrame) -> list[SlotChange]:
-    """Slot-by-slot differences between two gap reports (same formation)."""
+    """Slots whose starter, severity or fit (by MIN_FIT_CHANGE+) changes
+    between two gap reports of the same formation."""
     changes = []
     for b, w in zip(base.itertuples(), what_if.itertuples(), strict=True):
-        if b.starter != w.starter or b.fit != w.fit or b.severity != w.severity:
-            changes.append(SlotChange(b.slot, b.starter, b.fit, w.starter, w.fit,
-                                      b.severity, w.severity))  # fmt: skip
+        fit_moved = (not _missing(b.fit) and not _missing(w.fit)
+                     and abs(w.fit - b.fit) >= MIN_FIT_CHANGE)  # fmt: skip
+        if not _same(b.starter, w.starter) or not _same(b.severity, w.severity) or fit_moved:
+            changes.append(SlotChange(
+                b.slot, b.starter, b.fit, w.starter, w.fit,
+                None if _missing(b.severity) else b.severity,
+                None if _missing(w.severity) else w.severity,
+            ))  # fmt: skip
     return changes
