@@ -92,12 +92,22 @@ CREATE TABLE IF NOT EXISTS player_source_ids (
 );
 """
 
+# Columns added after the first release. ADD COLUMN IF NOT EXISTS keeps old
+# database files working without a separate migration tool.
+MIGRATIONS = """
+ALTER TABLE source_players ADD COLUMN IF NOT EXISTS detailed_position TEXT;
+ALTER TABLE source_players ADD COLUMN IF NOT EXISTS height_cm INTEGER;
+ALTER TABLE source_players ADD COLUMN IF NOT EXISTS foot TEXT;
+ALTER TABLE market ADD COLUMN IF NOT EXISTS joined_date DATE;
+"""
+
 
 def connect(path: Path | str = DEFAULT_DB) -> duckdb.DuckDBPyConnection:
     if str(path) != ":memory:":
         Path(path).parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(path))
     con.execute(SCHEMA)
+    con.execute(MIGRATIONS)
     return con
 
 
