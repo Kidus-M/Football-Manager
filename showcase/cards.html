@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recruitment showcase</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Archivo:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --red: #da291c; --ink: #150c0c; --ink-2: #2a1817;
+    --chalk: #f4efe9; --fog: #a8938f; --gold: #fbe122;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { background: #000; }
+  .card {
+    width: 1080px; height: 1350px; position: relative; overflow: hidden;
+    background: var(--ink); color: var(--chalk); font-family: Archivo, sans-serif;
+    padding: 72px 80px;
+  }
+  .card.red { background: var(--red); }
+  .display { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; text-transform: uppercase; line-height: .86; letter-spacing: -.01em; }
+  .mono { font-family: "JetBrains Mono", monospace; }
+  .eyebrow { font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; color: var(--fog); }
+  .red .eyebrow { color: #ffd9d4; }
+  .foot { position: absolute; left: 80px; right: 80px; bottom: 56px; display: flex; justify-content: space-between; gap: 30px;
+          font-family: "JetBrains Mono", monospace; font-size: 18px; color: var(--fog); letter-spacing: .04em; }
+  .red .foot { color: #ffd9d4; }
+
+  /* Entrances: every [data-in] rises in, staggered by --d (ms). The renderer
+     scrubs these animations frame by frame for the video. */
+  [data-in] { animation: rise .7s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--d, 0) * 1ms); }
+  @keyframes rise { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+  .grow { transform-origin: left; animation: grow 1.1s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--d, 0) * 1ms); }
+  @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  .draw { transform-origin: 215px 215px; animation: pop 1s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--d, 0) * 1ms); }
+  @keyframes pop { from { transform: scale(0); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  .cover h1 { font-size: 214px; margin-top: 40px; }
+  .cover h1 em { font-style: normal; color: var(--gold); }
+  .cover .sub { font-size: 34px; line-height: 1.3; max-width: 860px; margin-top: 44px; }
+
+  .slot { display: flex; align-items: baseline; gap: 22px; }
+  .slot b { font-family: "Big Shoulders Display"; font-weight: 900; font-size: 64px; color: var(--red); }
+  .name { font-size: 150px; margin-top: 16px; }
+  .meta { font-size: 26px; color: var(--fog); margin-top: 22px; }
+  .meta span + span::before { content: " · "; }
+  .verdict { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 52px; align-items: end; }
+  .delta { font-size: 220px; color: var(--gold); line-height: .8; }
+  .delta small { display: block; font-family: "JetBrains Mono"; font-size: 22px; color: var(--fog); letter-spacing: .1em; margin-top: 18px; font-weight: 400; }
+  .bars { display: grid; gap: 22px; }
+  .bar .lab { display: flex; justify-content: space-between; font-size: 22px; margin-bottom: 9px; }
+  .bar .lab .mono { font-weight: 700; }
+  .track { height: 18px; background: var(--ink-2); position: relative; }
+  .fill { position: absolute; inset: 0 auto 0 0; }
+  .range { position: absolute; top: 0; bottom: 0; background: rgba(251,225,34,.3); }
+  .body { display: grid; grid-template-columns: 430px 1fr; gap: 50px; margin-top: 40px; }
+  .line { font-size: 30px; line-height: 1.32; }
+  .line + .line { margin-top: 22px; }
+  .caveat { margin-top: 26px; font-size: 22px; line-height: 1.4; color: var(--fog); border-left: 4px solid var(--red); padding-left: 18px; }
+  .legend { display: flex; gap: 24px; font-size: 18px; color: var(--fog); margin-top: 6px; }
+  .legend i { display: inline-block; width: 22px; height: 4px; vertical-align: middle; margin-right: 8px; }
+
+  .xi h1 { font-size: 120px; margin-top: 18px; }
+  .pitch { margin-top: 40px; overflow: visible; }
+  .total { display: flex; gap: 60px; margin-top: 34px; }
+  .total div { font-size: 22px; color: #ffd9d4; }
+  .total b { display: block; font-family: "Big Shoulders Display"; font-weight: 900; font-size: 92px; color: var(--chalk); line-height: .9; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const DATA = /*DATA*/null;
+// Hand-written lines per pick; every number in them comes from picks.json.
+const COPY = {
+  GK: { lines: ["Top 2% in the Premier League for goals prevented.", "Builds play from the back: 89th percentile for xGBuildup."] },
+  RB: { lines: ["€6M for a wing-back who creates: xA and xGChain are his best numbers.", "2,069 La Liga minutes this season."], caveat: "No defensive data of his own this season, so those numbers are estimated and the fit is a range." },
+  LCB: { lines: ["98th percentile for tackles and interceptions, 96th for duels won.", "A stopper to play beside a ball-player."], caveat: "His defensive numbers are from 2024-25, so the system discounts him to 45% confidence. Watch him first." },
+  LB: { lines: ["99th percentile for key passes and 97th for xA in the Premier League.", "The most creative full-back the search found."], caveat: "Defending is estimated from playing style and team: likely fit 80–87." },
+  AM: { lines: ["94th percentile for xA and 92nd for key passes in Serie A.", "A creative No. 10 for €20M."] },
+  ST: { lines: ["Matches Šeško's fit for €9M, with 85th-percentile non-penalty xG.", "23, contract to 2029."] },
+};
+const money = (e) => e >= 1e6 ? `€${Math.round(e / 1e6)}M` : `€${Math.round(e / 1e3)}K`;
+const league = (c) => (c || "").split("-").slice(1).join("-");
+const last = (name) => name.split(" ").slice(1).join(" ") || name;  // "Maxim De Cuyper" -> "De Cuyper"
+const SOURCES = "FPL · Understat · API-Football · Transfermarkt";
+
+function radar(p, d) {
+  const axes = p.profile.percentiles, n = axes.length, R = 175, C = 215;
+  const pt = (i, v) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / n; const r = R * (v ?? 0) / 100; return [C + r * Math.cos(a), C + r * Math.sin(a)]; };
+  const poly = (vals) => vals.map((v, i) => pt(i, v).map((x) => x.toFixed(1)).join(",")).join(" ");
+  const rings = [25, 50, 75, 100].map((v) => `<polygon points="${poly(axes.map(() => v))}" fill="none" stroke="#3a2523" stroke-width="1.5"/>`).join("");
+  const spokes = axes.map((_, i) => { const [x, y] = pt(i, 100); return `<line x1="${C}" y1="${C}" x2="${x}" y2="${y}" stroke="#3a2523" stroke-width="1.5"/>`; }).join("");
+  const labels = axes.map((a, i) => {
+    const [x, y] = pt(i, 122);
+    const est = p.profile.provenance[a.metric]?.kind === "estimated", none = a.value == null;
+    const short = a.label.replace(/ \(.*\)/, "").replace("Non-penalty", "NP").replace("Ball recoveries", "Recoveries");
+    return `<text x="${x}" y="${y}" font-weight="600" fill="${est || none ? "#a8938f" : "#f4efe9"}" font-family="Archivo" font-size="17" text-anchor="middle" dominant-baseline="middle">${est ? "~" : ""}${short}${none ? " (no data)" : ""}</text>`;
+  }).join("");
+  const s = p.starter_profile;
+  return `<svg width="400" height="400" viewBox="-25 -25 480 480" style="overflow:visible">${rings}${spokes}
+    ${s ? `<polygon class="draw" style="--d:${d}" points="${poly(axes.map((a) => s.all_percentiles[a.metric]))}" fill="#a8938f" fill-opacity=".1" stroke="#a8938f" stroke-width="3" stroke-dasharray="8 7"/>` : ""}
+    <polygon class="draw" style="--d:${d + 250}" points="${poly(axes.map((a) => a.value))}" fill="#fbe122" fill-opacity=".22" stroke="#fbe122" stroke-width="4" stroke-linejoin="round"/>
+    ${labels}</svg>`;
+}
+
+function bar(label, value, d, colour, lo, hi) {
+  const range = lo != null && hi - lo >= 1 ? `<div class="range grow" style="--d:${d + 200};left:${lo}%;width:${hi - lo}%"></div>` : "";
+  return `<div class="bar" data-in style="--d:${d}"><div class="lab"><span>${label}</span><span class="mono">${Math.round(value)}</span></div>
+    <div class="track"><div class="fill grow" style="--d:${d};width:${value}%;background:${colour}"></div>${range}</div></div>`;
+}
+
+function playerCard(p, i) {
+  const c = p.candidate, copy = COPY[p.slot], st = p.starter;
+  const delta = Math.round(c.fit) - Math.round(st.fit);
+  return `<section class="card">
+    <div class="slot" data-in style="--d:0"><b>${p.slot}</b><span class="eyebrow">${p.role} · signing ${i + 1} of ${DATA.picks.length}</span></div>
+    <h1 class="display name" data-in style="--d:120">${c.name.replace(" ", "<br>")}</h1>
+    <div class="meta" data-in style="--d:240"><span>${c.club}</span><span>${league(c.competition_id)}</span><span>age ${c.age}</span><span>${money(c.value_eur)}</span><span>contract to ${c.contract_year}</span></div>
+    <div class="verdict">
+      <div class="display delta" data-in style="--d:420">${delta > 0 ? "+" + delta : "±0"}<small>FIT VS ${last(st.name).toUpperCase()}</small></div>
+      <div class="bars">${bar(last(c.name), c.fit, 520, "#fbe122", c.fit_lo, c.fit_hi)}${bar(last(st.name) + " (now)", st.fit, 640, "#6e5552")}</div>
+    </div>
+    <div class="body">
+      <div data-in style="--d:700">${radar(p, 800)}
+        <div class="legend"><span><i style="background:#fbe122"></i>${last(c.name)}</span><span><i style="background:#a8938f"></i>${last(st.name)}</span></div></div>
+      <div>${copy.lines.map((l, k) => `<p class="line" data-in style="--d:${1000 + k * 160}">${l}</p>`).join("")}
+        ${copy.caveat ? `<p class="caveat" data-in style="--d:1400">${copy.caveat}</p>` : ""}</div>
+    </div>
+    <div class="foot"><span>Percentiles vs league peers in his position${p.profile.percentiles.some((m) => p.profile.provenance[m.metric]?.kind === "estimated") ? " · ~ estimated" : ""}</span></div>
+  </section>`;
+}
+
+function pitch(w, h, d) {
+  const pos = { GK: [50, 92], RB: [86, 70], RCB: [62, 76], LCB: [38, 76], LB: [14, 70], DM: [38, 54], CM: [62, 54], RW: [85, 30], AM: [50, 35], LW: [15, 30], ST: [50, 11] };
+  const signed = Object.fromEntries(DATA.picks.map((p) => [p.slot, p.candidate.name]));
+  const starters = Object.fromEntries(DATA.lineup.slots.map((s) => [s.key, s.starter?.name]));
+  let k = 0;
+  const dots = Object.entries(pos).map(([slot, [x, y]]) => {
+    const name = signed[slot] ?? starters[slot] ?? "", isNew = slot in signed, X = x * w / 100, Y = y * h / 100;
+    return `<g data-in style="--d:${d + (isNew ? 500 + 140 * k++ : 0)}">
+      <circle cx="${X}" cy="${Y}" r="${isNew ? 22 : 13}" fill="${isNew ? "#fbe122" : "none"}" stroke="${isNew ? "#fbe122" : "#ffd9d4"}" stroke-width="3"/>
+      <text x="${X}" y="${Y + 54}" text-anchor="middle" font-family="Big Shoulders Display" font-weight="900" font-size="${isNew ? 38 : 28}" fill="${isNew ? "#fff" : "#ffd9d4"}" stroke="#da291c" stroke-width="8" paint-order="stroke">${last(name).toUpperCase()}</text></g>`;
+  }).join("");
+  const L = "#f08a80";
+  return `<svg width="${w}" height="${h}" class="pitch">
+    <rect x="2" y="2" width="${w - 4}" height="${h - 4}" fill="none" stroke="${L}" stroke-width="3"/>
+    <line x1="2" y1="${h / 2}" x2="${w - 2}" y2="${h / 2}" stroke="${L}" stroke-width="3"/>
+    <circle cx="${w / 2}" cy="${h / 2}" r="${h * .1}" fill="none" stroke="${L}" stroke-width="3"/>
+    <rect x="${w * .22}" y="2" width="${w * .56}" height="${h * .15}" fill="none" stroke="${L}" stroke-width="3"/>
+    <rect x="${w * .22}" y="${h * .85 - 2}" width="${w * .56}" height="${h * .15}" fill="none" stroke="${L}" stroke-width="3"/>
+    ${dots}</svg>`;
+}
+
+const total = () => DATA.picks.reduce((a, p) => a + p.candidate.value_eur, 0);
+const avgAge = () => (DATA.picks.reduce((a, p) => a + p.candidate.age, 0) / DATA.picks.length).toFixed(1);
+
+function cover() {
+  return `<section class="card red cover">
+    <div class="eyebrow" data-in style="--d:0">Manchester United · 4-2-3-1 · next window</div>
+    <h1 class="display" data-in style="--d:150">Six<br>signings.<br><em>All 25<br>or under.</em></h1>
+    <p class="sub" data-in style="--d:450">I built a recruitment system on free data. It found United's weakest positions, searched Europe's top five leagues and ranked who fits. Total market value: ${money(total())}.</p>
+    <div class="foot"><span>Swipe →</span><span>${SOURCES}</span></div></section>`;
+}
+
+function method() {
+  const steps = [
+    ["Find the gaps", "Rate every United starter against his role in the 4-2-3-1. The goalkeeper came out worst."],
+    ["Search the market", "Rank every player in the top five leagues by role fit, adjusted for league strength and team possession."],
+    ["Be honest about data", "Free data has no current-season defending outside England. Missing numbers are estimated, shown as ranges, and count for less."],
+  ];
+  return `<section class="card">
+    <div class="eyebrow" data-in style="--d:0">How the system picks</div>
+    <h1 class="display" style="font-size:130px;margin-top:20px;--d:100" data-in>Gaps first,<br>then names.</h1>
+    <div style="margin-top:70px;display:grid;gap:52px">
+      ${steps.map(([h, t], i) => `<div data-in style="--d:${400 + i * 250};display:grid;grid-template-columns:110px 1fr;gap:20px">
+        <div class="display" style="font-size:96px;color:var(--red)">${i + 1}</div>
+        <div><div class="display" style="font-size:54px">${h}</div><p style="font-size:28px;line-height:1.35;margin-top:12px;color:#d8ccc8">${t}</p></div></div>`).join("")}
+    </div>
+    <div class="foot"><span>Built with Python · DuckDB · scikit-learn · FastAPI · Next.js</span></div></section>`;
+}
+
+function xi() {
+  return `<section class="card red xi">
+    <div class="eyebrow" data-in style="--d:0">The XI after the window</div>
+    <h1 class="display" data-in style="--d:120">Younger. Cheaper.<br>Better fit.</h1>
+    ${pitch(920, 740, 200)}
+    <div class="total">
+      <div data-in style="--d:1500"><b>${money(total())}</b>for six players</div>
+      <div data-in style="--d:1650"><b>${avgAge()}</b>average age</div>
+      <div data-in style="--d:1800"><b>5</b>leagues searched</div>
+    </div>
+    <div class="foot"><span>Fit = role-fit percentile, discounted for league strength and data confidence</span></div></section>`;
+}
+
+const CARDS = [cover, method, ...DATA.picks.map((p, i) => () => playerCard(p, i)), xi];
+const n = Number(new URLSearchParams(location.search).get("card") ?? 0);
+document.getElementById("root").innerHTML = CARDS[n]();
+window.CARD_COUNT = CARDS.length;
+</script>
+</body>
+</html>
