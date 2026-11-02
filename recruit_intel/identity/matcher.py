@@ -181,11 +181,34 @@ def match_direct(fpl: pd.DataFrame, us: pd.DataFrame, fpl_clubs: dict, us_clubs:
     return links
 
 
+def match_same_club_season(src: pd.DataFrame, us: pd.DataFrame) -> Links:
+    """Leftover players of another source -> Understat players at the same club
+    in the same league-season (club names matched per league-season). Both
+    frames: source_player_id, name, season, competition_id, team_name; a
+    player has one row per club and season."""
+    cands = []
+    for (season, comp), group in src.groupby(["season", "competition_id"]):
+        pool = us[(us.season == season) & (us.competition_id == comp)]
+        if pool.empty:
+            continue
+        clubs = match_teams(group.team_name.unique().tolist(), pool.team_name.unique().tolist())
+        for row in group.itertuples():
+            club = clubs.get(row.team_name)
+            if club:
+                best = _best(row.name, pool[pool.team_name == club], DIRECT_STAGE)
+                if best:
+                    cands.append((best[0], row.source_player_id, best[1]))
+    links: Links = {}
+    _assign(cands, links, set(), "same_club_season")
+    return links
+
+
 def build_identity(
     tm: pd.DataFrame,
     fpl: pd.DataFrame,
     us: pd.DataFrame,
     af: pd.DataFrame | None = None,
+    club_seasons: dict[str, pd.DataFrame] | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Rows for `players` and `player_source_ids`.
 
@@ -194,6 +217,10 @@ def build_identity(
     us:  source_player_id, name, position, team_name, competition_id
     af:  source_player_id, name, birth_date, position, team_name (API-Football;
          optional, matched by birth date like FPL)
+    club_seasons: optional {"af": ..., "us": ...} rows of match_same_club_season,
+         to link API-Football players with no birth-date match (players who
+         have since left the top five have no Transfermarkt anchor) to
+         Understat through their club in the same season
     """
     if af is None:
         af = fpl.iloc[:0]
@@ -217,6 +244,19 @@ def build_identity(
     for us_id, (fpl_id, score, method) in direct.items():
         # The FPL player may itself be unmatched, so it carries an fpl- id.
         rows.append(("fpl-" + fpl_id, "understat", us_id, score, method))
+
+    if club_seasons is not None:
+        us_ids = {pid: canon for canon, source, pid, _, _ in rows if source == "understat"}
+        af_ids = {canon for canon, source, _, _, _ in rows if source == "apifootball"}
+        # Understat players whose canonical player already has API-Football.
+        spoken_for = {pid for pid, canon in us_ids.items() if canon in af_ids}
+        cs_af, cs_us = club_seasons["af"], club_seasons["us"]
+        extra = match_same_club_season(
+            cs_af[~cs_af.source_player_id.isin(af_links)],
+            cs_us[~cs_us.source_player_id.isin(spoken_for)],
+        )
+        for af_id, (us_id, score, method) in extra.items():
+            rows.append((us_ids.get(us_id, f"us-{us_id}"), "apifootball", af_id, score, method))
 
     linked = {(source, pid) for _, source, pid, _, _ in rows}
     for source, df in (("fpl", fpl), ("understat", us), ("apifootball", af)):

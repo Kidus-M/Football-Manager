@@ -54,7 +54,26 @@ def load_inputs(con: duckdb.DuckDBPyConnection) -> dict[str, pd.DataFrame]:
         """
     ).df()
     af["birth_date"] = pd.to_datetime(af["birth_date"]).dt.date
-    return {"tm": tm, "fpl": fpl, "us": us, "af": af}
+    return {"tm": tm, "fpl": fpl, "us": us, "af": af,
+            "club_seasons": {"af": _club_seasons(con, "apifootball"),
+                             "us": _club_seasons(con, "understat")}}  # fmt: skip
+
+
+def _club_seasons(con: duckdb.DuckDBPyConnection, source: str) -> pd.DataFrame:
+    """source_player_id, name, season, competition_id, team_name: one row per
+    club a player played for in a league-season."""
+    return con.execute(
+        """
+        WITH s AS (
+            SELECT DISTINCT source_player_id, season, competition_id,
+                   trim(unnest(string_split(team_name, ','))) AS team_name
+            FROM player_season_stats WHERE source = ? AND team_name IS NOT NULL
+        )
+        SELECT s.*, p.name FROM s JOIN source_players p
+          ON p.source = ? AND p.source_player_id = s.source_player_id
+        """,
+        [source, source],
+    ).df()
 
 
 def report(ids: pd.DataFrame, inputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
@@ -80,7 +99,9 @@ def report(ids: pd.DataFrame, inputs: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
 def rebuild(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     inputs = load_inputs(con)
-    tables = build_identity(inputs["tm"], inputs["fpl"], inputs["us"], inputs["af"])
+    tables = build_identity(
+        inputs["tm"], inputs["fpl"], inputs["us"], inputs["af"], inputs["club_seasons"]
+    )
     for table in ("player_source_ids", "players"):
         con.execute(f"DELETE FROM {table}")
         db.upsert(con, table, tables[table])
