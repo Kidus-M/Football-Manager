@@ -18,6 +18,10 @@ percentile) predict the possession-adjusted per-90 from:
   he has one ("carried" estimates); without one, the model works from the
   rest alone ("estimated")
 
+Until older API-Football seasons are loaded the model has no anchors to learn
+from; players with an older season then keep it as-is ("older") and only
+players with none are estimated.
+
 Training rows are every measured API-Football player-season, each seen with
 every earlier season as its anchor and once with no anchor, so the model
 learns all three situations. Validation holds out whole players.
@@ -51,7 +55,9 @@ PATH = DATA_DIR / "models" / "defence.joblib"
 REPORT = DATA_DIR / "models" / "defence.json"
 # Until a model is validated: how far a filled value can be trusted to rank
 # players the way measured data would (1 = as well as measured data).
-DEFAULT_RELIABILITY = {"measured": 1.0, "older": 0.6, "carried": 0.6, "estimated": 0.3}
+# "older" (a season carried as-is) is a guess until a model trained with older
+# seasons measures it; the rest are replaced by validation.
+DEFAULT_RELIABILITY = {"measured": 1.0, "older": 0.5, "carried": 0.6, "estimated": 0.3}
 
 
 def _age(birth_date: pd.Series, season: float) -> pd.Series:
@@ -181,15 +187,24 @@ class DefenceModel:
             if target not in out:
                 out[target] = np.nan
             gap = can & out[target].isna()
-            out.loc[gap, target] = pred.loc[gap, "mid"]
-            out.loc[gap, f"{target}_lo"] = pred.loc[gap, "lo"]
-            out.loc[gap, f"{target}_hi"] = pred.loc[gap, "hi"]
-            # "carried" only when the model actually uses the anchor: it can't
-            # until older API-Football seasons are loaded to learn from.
-            anchored = x[f"lag_{target}"].notna() & (f"lag_{target}" in self.numeric)
-            out.loc[gap, f"{target}_kind"] = np.where(anchored[gap], "carried", "estimated")
-            carried = gap & anchored
-            out.loc[carried, "defence_season"] = anchor_season[carried]
+            anchor = x[f"lag_{target}"]
+            if f"lag_{target}" in self.numeric:
+                kind = np.where(anchor.notna(), "carried", "estimated")
+            else:
+                # The model hasn't learned from anchors (no older seasons were
+                # loaded to train on), so a player's own older season beats an
+                # estimate that ignores it: use it as-is.
+                kind = np.where(anchor.notna(), "older", "estimated")
+            kind = pd.Series(kind, index=out.index)
+            estimate = gap & (kind != "older")
+            out.loc[estimate, target] = pred.loc[estimate, "mid"]
+            out.loc[estimate, f"{target}_lo"] = pred.loc[estimate, "lo"]
+            out.loc[estimate, f"{target}_hi"] = pred.loc[estimate, "hi"]
+            older = gap & (kind == "older")
+            out.loc[older, target] = anchor[older]
+            out.loc[gap, f"{target}_kind"] = kind[gap]
+            own = gap & (kind != "estimated")
+            out.loc[own, "defence_season"] = anchor_season[own]
         return out
 
     def save(self, path: Path = PATH) -> None:
@@ -291,7 +306,8 @@ def _band_scale(rows: pd.DataFrame, preds: dict[str, pd.DataFrame]) -> dict:
         y, p = rows.loc[known, t], p[known]
         eps = 1e-6
         need = np.maximum((p.mid - y) / (p.mid - p.lo + eps), (y - p.mid) / (p.hi - p.mid + eps))
-        anchored = rows.loc[known, f"lag_{t}"].notna() if f"lag_{t}" in rows else False
+        anchored = (rows.loc[known, f"lag_{t}"].notna() if f"lag_{t}" in rows
+                    else pd.Series(False, index=y.index))  # fmt: skip
         scales = {}
         for kind, mask in (("carried", anchored), ("estimated", ~anchored)):
             if np.any(mask) and int(np.sum(mask)) >= MIN_GROUP_ROWS:

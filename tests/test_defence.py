@@ -179,7 +179,16 @@ def test_model_uses_the_anchor_and_validates(two_targets):
     assert report["reliability"]["carried"] > report["reliability"]["estimated"]
 
 
-def test_fill_marks_carried_and_estimated_cells(two_targets):
+def test_without_anchors_to_learn_from_own_older_seasons_are_kept(two_targets):
+    con = _db_with_older_season()
+    model = defence.DefenceModel.fit(_synthetic_rows().drop(columns=["lag_tackles", "lag_gap"]))
+    filled = model.fill(con, _window(), [2025, 2026]).set_index("player_id")
+    assert filled.loc["tm-1", "tackles_kind"] == "older"
+    assert filled.loc["tm-1", "tackles"] == pytest.approx(3.0)  # 60 / 1800 * 90, as-is
+    assert filled.loc["tm-2", "tackles_kind"] == "estimated"
+
+
+def _db_with_older_season():
     con = connect(":memory:")
     upsert(con, "players", pd.DataFrame([
         {"player_id": "tm-1", "name": "A", "position": "DEF", "detailed_position": "Centre-Back",
@@ -191,14 +200,21 @@ def test_fill_marks_carried_and_estimated_cells(two_targets):
     upsert(con, "player_season_stats", pd.DataFrame([
         _stat("apifootball", "9", "tackles", 60, 1800, season=2024),
     ]))  # fmt: skip
-    model = defence.DefenceModel.fit(_synthetic_rows())
-    out = pd.DataFrame([
+    return con
+
+
+def _window():
+    return pd.DataFrame([
         {"player_id": pid, "group": "CB", "competition_id": ITA, "minutes": 2000,
          "birth_date": date(1999, 1, 1), "defence_season": pd.NA,
          **{c: 0.5 for c in defence.PROFILE}}
         for pid in ("tm-1", "tm-2")
     ])  # fmt: skip
-    filled = model.fill(con, out, [2025, 2026]).set_index("player_id")
+
+
+def test_fill_marks_carried_and_estimated_cells(two_targets):
+    model = defence.DefenceModel.fit(_synthetic_rows())
+    filled = model.fill(_db_with_older_season(), _window(), [2025, 2026]).set_index("player_id")
     assert filled.loc["tm-1", "tackles_kind"] == "carried"
     assert filled.loc["tm-1", "defence_season"] == 2024
     assert filled.loc["tm-2", "tackles_kind"] == "estimated"

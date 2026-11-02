@@ -33,6 +33,16 @@ def name_score(a: str, b: str) -> float:
     return 0.7 * fuzz.token_set_ratio(a, b) + 0.3 * fuzz.token_sort_ratio(a, b)
 
 
+def initial_score(a: str, b: str) -> float:
+    """name_score, but an initial that fits counts as the full first name:
+    API-Football writes 'B. Saka', which scores low against 'Bukayo Saka'
+    on letters alone, worst for short surnames."""
+    ta, tb = normalize(a).split(), normalize(b).split()
+    if len(ta) >= 2 and len(ta[0]) == 1 and len(tb) >= 2 and tb[0].startswith(ta[0]):
+        return name_score(" ".join([tb[0], *ta[1:]]), b)
+    return name_score(a, b)
+
+
 def surnames_agree(a: str, b: str, allow_single: bool) -> bool:
     """Guard against first-name-only matches ('Alberto Moreno' / 'Alberto Dossena').
 
@@ -83,10 +93,12 @@ def _assign(candidates: list[tuple[float, str, str]], links: Links, taken: set[s
         taken.add(target_id)
 
 
-def _best(name: str, pool: pd.DataFrame, stage: Stage) -> tuple[float, str] | None:
+def _best(
+    name: str, pool: pd.DataFrame, stage: Stage, score=name_score
+) -> tuple[float, str] | None:
     scores = sorted(
         (
-            (name_score(name, n), pid)
+            (score(name, n), pid)
             for pid, n in zip(pool.source_player_id, pool.name, strict=True)
             if surnames_agree(name, n, stage.allow_single)
         ),
@@ -195,7 +207,8 @@ def match_same_club_season(src: pd.DataFrame, us: pd.DataFrame) -> Links:
         for row in group.itertuples():
             club = clubs.get(row.team_name)
             if club:
-                best = _best(row.name, pool[pool.team_name == club], DIRECT_STAGE)
+                best = _best(row.name, pool[pool.team_name == club], DIRECT_STAGE,
+                             score=initial_score)  # fmt: skip
                 if best:
                     cands.append((best[0], row.source_player_id, best[1]))
     links: Links = {}

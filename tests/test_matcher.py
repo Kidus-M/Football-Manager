@@ -113,3 +113,31 @@ def test_unmatched_player_keeps_source_id_and_canonical_row():
     assert players.loc["tm-1", "name"] == "Bruno Fernandes"  # Transfermarkt name preferred
     assert players.loc["us-104", "name"] == "Someone Unknown"
     assert out["player_source_ids"].groupby(["source", "source_player_id"]).size().max() == 1
+
+
+def test_apifootball_links_to_understat_through_club_and_season():
+    af = pd.DataFrame(
+        [("500", "R. Fraser", date(1994, 2, 24), "MID", "Southampton"),  # left the top 5
+         ("501", "B. Saka", None, "FWD", "Arsenal"),  # no birth date: no TM link
+         ("502", "J. Nobody", None, "MID", "Arsenal")],  # fmt: skip
+        columns=["source_player_id", "name", "birth_date", "position", "team_name"],
+    )
+    us = pd.concat([US, pd.DataFrame([("105", "Ryan Fraser", "MID", "Southampton", EPL)],
+                                     columns=US.columns)])  # fmt: skip
+    seasons = {
+        "af": pd.DataFrame(
+            [("500", "R. Fraser", 2024, EPL, "Southampton"),
+             ("501", "B. Saka", 2024, EPL, "Arsenal"),
+             ("502", "J. Nobody", 2024, EPL, "Arsenal")],
+            columns=["source_player_id", "name", "season", "competition_id", "team_name"],
+        ),
+        "us": pd.DataFrame(
+            [("105", "Ryan Fraser", 2024, EPL, "Southampton"),
+             ("101", "Bukayo Saka", 2024, EPL, "Arsenal")],
+            columns=["source_player_id", "name", "season", "competition_id", "team_name"],
+        ),
+    }  # fmt: skip
+    m = ids_by_source(build_identity(TM, FPL, us, af, seasons))
+    assert m[("apifootball", "500")] == m[("understat", "105")] == "us-105"
+    assert m[("apifootball", "501")] == "tm-3"  # through Understat's Transfermarkt link
+    assert m[("apifootball", "502")] == "af-502"  # nobody at the club by that name
