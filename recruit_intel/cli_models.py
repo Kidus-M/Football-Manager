@@ -116,9 +116,11 @@ def _train_defence(con) -> int:
     print(f"  ranges widened to cover 80% (factor per metric): {report['band_scale']}")
     print(f"  reliability used to weight estimates in search: {report['reliability']}")
     if check:
-        print(f"  Unseen season ({check['season']}, Premier League), against FPL's own counts:")
-        for kind in ("carried", "estimated"):
-            print(f"    {kind}: {check[kind]}")
+        print(f"  Unseen season ({check['season']}, Premier League), tackles against FPL's own "
+              f"counts (players with 450+ minutes; small and early-season, so noisy):")  # fmt: skip
+        for k, v in check.items():
+            if k not in ("season", "competition"):
+                print(f"    {k}: {v}")
     return 0
 
 

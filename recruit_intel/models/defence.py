@@ -184,7 +184,9 @@ class DefenceModel:
             out.loc[gap, target] = pred.loc[gap, "mid"]
             out.loc[gap, f"{target}_lo"] = pred.loc[gap, "lo"]
             out.loc[gap, f"{target}_hi"] = pred.loc[gap, "hi"]
-            anchored = x[f"lag_{target}"].notna()
+            # "carried" only when the model actually uses the anchor: it can't
+            # until older API-Football seasons are loaded to learn from.
+            anchored = x[f"lag_{target}"].notna() & (f"lag_{target}" in self.numeric)
             out.loc[gap, f"{target}_kind"] = np.where(anchored[gap], "carried", "estimated")
             carried = gap & anchored
             out.loc[carried, "defence_season"] = anchor_season[carried]
@@ -318,29 +320,32 @@ def _reliability(table: list[dict]) -> dict[str, float]:
 def external_check(
     con: duckdb.DuckDBPyConnection, model: DefenceModel, season: int, competition: str
 ) -> dict | None:
-    """Score the model on a season it never saw: FPL's measured tackles and
-    clearances+blocks+interceptions in the Premier League, against the
-    estimated tackles and interceptions+blocks (rank correlations within group;
-    FPL counts differ in definition, so only the ordering is comparable)."""
+    """Score the model on a season it never saw: FPL's measured tackles in the
+    Premier League against the estimated ones, and against just reusing each
+    player's latest API-Football season. Rank correlations within group; FPL
+    counts tackles its own way, so only the ordering is comparable. (FPL's
+    clearances+blocks+interceptions is mostly clearances, which no estimated
+    metric measures, so it isn't compared.)"""
     from recruit_intel.features.per90 import per90_table
 
     table = per90_table(con, season, fill=False)
-    table = table[(table.competition_id == competition) & (table.minutes >= MIN_TRAIN_MINUTES)]
+    table = table[(table.competition_id == competition) & (table.minutes >= history.MIN_MINUTES)]
     if table.empty or "tackles" not in table:
         return None
-    measured = table[["player_id", "group", "tackles", *(["cbi"] if "cbi" in table else [])]]
     blank = table.drop(columns=[c for c in TARGETS if c in table])
-    filled = model.fill(con, blank, [season])
-    keep = [c for t in TARGETS for c in (t, f"{t}_kind") if c in filled]
-    both = filled[["player_id", *keep]].merge(measured, on="player_id", suffixes=("_est", ""))
-    both["ib_est"] = both.interceptions + both.blocks
-    out = {"season": season, "competition": competition, "players": len(both)}
-    for kind in ("carried", "estimated"):
-        part = both[both.get("tackles_kind") == kind] if "tackles_kind" in both else both.iloc[:0]
-        out[kind] = {
-            "players": len(part),
-            "tackles": _within_group_corr(part, "tackles_est", "tackles"),
-            "cbi vs interceptions+blocks": _within_group_corr(part, "ib_est", "cbi")
-            if "cbi" in part else None,
-        }  # fmt: skip
-    return out
+    filled = model.fill(con, blank, [season]).set_index("player_id")
+    anchors = history.latest_before(
+        history.measured_seasons(con, before=season, player_ids=table.player_id.tolist())
+    ).set_index("player_id")
+    both = table[["player_id", "group", "tackles"]].assign(
+        estimate=table.player_id.map(filled.tackles),
+        anchor=table.player_id.map(anchors.tackles) if not anchors.empty else np.nan,
+    )
+    with_anchor = both[both.anchor.notna()]
+    return {
+        "season": season, "competition": competition, "players": len(both),
+        "model": _within_group_corr(both, "estimate", "tackles"),
+        "players with an older season": len(with_anchor),
+        "model, those players": _within_group_corr(with_anchor, "estimate", "tackles"),
+        "older season as-is, those players": _within_group_corr(with_anchor, "anchor", "tackles"),
+    }  # fmt: skip
