@@ -117,9 +117,11 @@ def test_unmatched_player_keeps_source_id_and_canonical_row():
 
 def test_apifootball_links_to_understat_through_club_and_season():
     af = pd.DataFrame(
-        [("500", "R. Fraser", date(1994, 2, 24), "MID", "Southampton"),  # left the top 5
-         ("501", "B. Saka", None, "FWD", "Arsenal"),  # no birth date: no TM link
-         ("502", "J. Nobody", None, "MID", "Arsenal")],  # fmt: skip
+        [
+            ("500", "R. Fraser", date(1994, 2, 24), "MID", "Southampton"),  # left the top 5
+            ("501", "B. Saka", None, "FWD", "Arsenal"),  # no birth date: no TM link
+            ("502", "J. Nobody", None, "MID", "Arsenal"),
+        ],  # fmt: skip
         columns=["source_player_id", "name", "birth_date", "position", "team_name"],
     )
     us = pd.concat([US, pd.DataFrame([("105", "Ryan Fraser", "MID", "Southampton", EPL)],
