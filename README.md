@@ -48,7 +48,7 @@ from [API-Football](https://www.api-football.com). Put a free key in `.env`
 ```
 
 The free plan allows 100 requests a day, only seasons 2022-23 to 2024-25, and
-only three pages per listing, so players are fetched club by club (~100
+only three pages per listing, so players are fetched club by club (~40
 requests per league-season: 2024-25 for all five leagues first, then the two
 seasons before it, about a week in all). Records where API-Football attaches
 one stat line to two clubs are dropped. It never records dribbled-past, so no
