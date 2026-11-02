@@ -102,11 +102,12 @@ def search(
     leagues: Annotated[list[str] | None, Query()] = None,
     min_minutes: Annotated[int | None, Query(ge=0)] = None,
     upgrades: bool = False,
+    own_data_only: bool = False,
     limit: Annotated[int, Query(le=100)] = 20,
 ):
     try:
         return service.search(slot, formation, max_age, max_value_m, contract_until, leagues,
-                              min_minutes, upgrades, limit)  # fmt: skip
+                              min_minutes, upgrades, limit, own_data_only)  # fmt: skip
     except KeyError as exc:
         raise HTTPException(404, f"no slot {slot} in the formation") from exc
 

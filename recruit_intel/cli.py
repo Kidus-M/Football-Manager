@@ -223,6 +223,20 @@ def _print_squad_profile(con, club, season) -> None:
         print(table[cols].to_string(index=False, na_rep="-"))
 
 
+def _provenance(row: pd.Series, metric: str, older: str | None) -> str:
+    """Where a percentile comes from, when it isn't measured in the window."""
+    kind = row.get(f"{metric}_kind")
+    if not isinstance(kind, str):
+        return ""
+    lo, hi = row.get(f"{metric}_lo"), row.get(f"{metric}_hi")
+    band = f" (likely {lo:.0f}-{hi:.0f})" if pd.notna(lo) and pd.notna(hi) else ""
+    return {
+        "older": f"from {older}, not this window",
+        "carried": f"estimated from {older} and this season's profile{band}",
+        "estimated": f"estimated: no defensive data of his own{band}",
+    }.get(kind, kind)
+
+
 def _print_player(row: pd.Series, min_minutes: int) -> None:
     group = GROUPS[row["group"]]
     sample = "" if row.qualified else f"  (under {min_minutes} min: small sample)"
@@ -230,14 +244,12 @@ def _print_player(row: pd.Series, min_minutes: int) -> None:
           f"{int(row.minutes)} min{sample}")  # fmt: skip
     print(f"vs {int(row.peers)} {group['label'].lower()}")
     older = row.get("defence_season")
-    if older is not None and not pd.isna(older):
-        print(f"(interceptions, blocks, duels and dribbled-past from {_season_label(int(older))}: "
-              f"the newest season API-Football's free plan allows)")  # fmt: skip
+    older = None if older is None or pd.isna(older) else _season_label(int(older))
     for m in group["metrics"]:
         pct = row.get(m)
         bar = "-" if pd.isna(pct) else "█" * round(pct / 5)
         value = "n/a" if pd.isna(pct) else f"{pct:3.0f}"
-        print(f"  {profile.label(m):<36} {value}  {bar}")
+        print(f"  {profile.label(m):<36} {value}  {bar:<20} {_provenance(row, m, older)}")
     strengths, weaknesses = profile.strengths_weaknesses(row)
     print("  strengths: " + (", ".join(profile.label(m) for m in strengths) or "-"))
     print("  weaknesses: " + (", ".join(profile.label(m) for m in weaknesses) or "-"))
@@ -309,6 +321,7 @@ def _search_slot(pool, slot, starter, club, args, roster_ids, strength, system) 
         contract_until=args.contract_until,
         min_minutes=args.min_minutes or club.recruitment.min_minutes,
         exclude=roster_ids,
+        own_data_only=args.own_data_only,
     )
     window = club.season_start_year + 1
     ranked = rank_mod.rank(
@@ -358,10 +371,10 @@ def cmd_search(args: argparse.Namespace) -> int:
     window = f"{_season_label(seasons[0])} to {_season_label(seasons[-1])}"
     print(f"{club.club} · market search · stats {window}")
     if system is None:
-        print("score = 65% fit (discounted for league and missing data) + 15% age + 10% value"
+        print("score = 65% fit (discounted for league and data confidence) + 15% age + 10% value"
               " + 10% contract")  # fmt: skip
     else:
-        print("score = 60% fit (discounted for league and missing data) + 5% system fit at "
+        print("score = 60% fit (discounted for league and data confidence) + 5% system fit at "
               f"{club.club} + 15% age + 10% value + 10% contract")  # fmt: skip
     for key in slots:
         depth = by_slot[key]
@@ -589,6 +602,12 @@ def main(argv: list[str] | None = None) -> int:
     p_search.add_argument("--limit", type=int, default=8)
     p_search.add_argument(
         "--upgrades", action="store_true", help="only candidates whose fit beats the starter's"
+    )
+    p_search.add_argument(
+        "--own-data-only",
+        action="store_true",
+        help="leave out players whose fit leans on a defensive estimate (no measured "
+        "season of their own)",
     )
     p_search.set_defaults(func=cmd_search)
 

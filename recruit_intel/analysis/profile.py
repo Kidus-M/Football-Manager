@@ -38,8 +38,10 @@ class RoleFit:
 
 
 def strengths_weaknesses(row: pd.Series) -> tuple[list[str], list[str]]:
-    """Metrics of the player's position group at the extremes, best/worst first."""
-    metrics = [m for m in GROUPS[row["group"]]["metrics"] if pd.notna(row.get(m))]
+    """Metrics of the player's position group at the extremes, best/worst first.
+    Estimates don't count: a strength has to be in the player's own data."""
+    metrics = [m for m in GROUPS[row["group"]]["metrics"]
+               if pd.notna(row.get(m)) and _kind(row, m) in ("measured", "older")]  # fmt: skip
     ranked = sorted(metrics, key=lambda m: row[m], reverse=True)
     strengths = [m for m in ranked if row[m] >= STRENGTH]
     weaknesses = [m for m in reversed(ranked) if row[m] <= WEAKNESS]

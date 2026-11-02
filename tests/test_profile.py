@@ -35,3 +35,8 @@ def test_best_role_picks_highest_fit():
 def test_negative_role_weight_rejected():
     with pytest.raises(ValueError, match="positive"):
         Role(key="r", label="R", groups=["GK"], weights={"goals_conceded": -1})
+
+
+def test_estimates_are_never_strengths_or_weaknesses():
+    row = _row(npxg=95, shots=10, xa=90, xa_kind="estimated", shots_kind="carried")
+    assert strengths_weaknesses(row) == (["npxg"], [])

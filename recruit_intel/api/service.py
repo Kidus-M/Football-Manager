@@ -181,8 +181,18 @@ def player(player_id: str) -> dict | None:
         "basis": basis,
         "minutes": clean(row.minutes),
         "qualified": clean(row.get("qualified")),
-        # Season the older API-Football defensive stats come from, if used.
+        # Season the player's own older API-Football numbers come from, when
+        # they are used as-is or anchor an estimate.
         "defence_season": clean(row.get("defence_season")),
+        # Metrics not measured in the window: "older" (an older season as-is),
+        # "carried" (estimated from his older season and current profile) or
+        # "estimated" (no data of his own), with the estimate's likely range
+        # in percentiles.
+        "provenance": {
+            k: {"kind": kind, "lo": clean(row.get(f"{k}_lo")), "hi": clean(row.get(f"{k}_hi"))}
+            for k in METRICS
+            if isinstance(kind := row.get(f"{k}_kind"), str)
+        },
         "peers": clean(row.get("peers")),
         "club": clean(m.club) if m is not None else None,
         "age": clean(m.age) if m is not None else None,
@@ -197,7 +207,14 @@ def player(player_id: str) -> dict | None:
         "strengths": [profile.label(k) for k in strengths],
         "weaknesses": [profile.label(k) for k in weaknesses],
         "roles": [
-            {"role": roles[f.role].label, "fit": round(f.score)}
+            {
+                "role": roles[f.role].label,
+                "fit": round(f.score),
+                "lo": round(f.lo),
+                "hi": round(f.hi),
+                "confidence": round(f.confidence, 2),
+                "own_data": f.own_data,
+            }
             for f in profile.role_fits(row, roles)[:3]
         ],  # fmt: skip
     }
@@ -216,7 +233,8 @@ def find(q: str, limit: int = 12) -> list[dict]:
 def search(slot: str, formation: str | None = None, max_age: int | None = None,
            max_value_m: float | None = None, contract_until: int | None = None,
            leagues: list[str] | None = None, min_minutes: int | None = None,
-           upgrades: bool = False, limit: int = 20) -> dict:  # fmt: skip
+           upgrades: bool = False, limit: int = 20,
+           own_data_only: bool = False) -> dict:  # fmt: skip
     from recruit_intel.ingest import transfermarkt
 
     c = club()
@@ -236,6 +254,7 @@ def search(slot: str, formation: str | None = None, max_age: int | None = None,
         contract_until=contract_until,
         min_minutes=min_minutes or c.recruitment.min_minutes,
         exclude=set(profile.squad_roster(con(), c).player_id),
+        own_data_only=own_data_only,
     )
     strength = league_strength()
     ranked = rank_mod.rank(pool, role, filters, strength, c.season_start_year + 1, budget)
@@ -249,7 +268,8 @@ def search(slot: str, formation: str | None = None, max_age: int | None = None,
     if not ranked.empty:
         ranked = ranked.assign(vs_starter=(ranked.fit - base) if base is not None else None)
     cols = ["player_id", "name", "club", "competition_id", "age", "value_eur",
-            "contract_year", "fit", "score", "vs_starter", "why"]  # fmt: skip
+            "contract_year", "fit", "fit_lo", "fit_hi", "confidence", "own_data", "score",
+            "vs_starter", "why"]  # fmt: skip
     return {
         "slot": slot,
         "role": role.label,
