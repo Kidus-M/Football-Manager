@@ -132,9 +132,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     return 0 if run.ok else 1
 
 
-def _ingest_apifootball(
-    run: _Runner, countries: list[str], season: int, history: int = 0
-) -> None:
+def _ingest_apifootball(run: _Runner, countries: list[str], season: int, history: int = 0) -> None:
     """Defensive stats for every pool league. Stops at the daily quota; cached
     pages make the next run continue where this one stopped.
 

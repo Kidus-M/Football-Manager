@@ -102,5 +102,3 @@ def per90_table(
     metric_cols = [m for m in METRICS if m in out]
     extra = [f"{m}_{s}" for m in metric_cols for s in ("kind", "lo", "hi") if f"{m}_{s}" in out]
     return out[lead + metric_cols + extra]
-
-

@@ -68,8 +68,12 @@ def test_estimates_rank_against_measured_reference_with_a_range():
     ])  # fmt: skip
     # No measured peers in the window: rank against measured older seasons.
     reference = pd.DataFrame(
-        {"competition_id": ITA, "group": "CB", "metric": "tackles",
-         "value": np.linspace(0.1, 3.9, 39)}  # fmt: skip
+        {
+            "competition_id": ITA,
+            "group": "CB",
+            "metric": "tackles",
+            "value": np.linspace(0.1, 3.9, 39),
+        }  # fmt: skip
     )
     pct = percentiles(table, ITA, min_minutes=0, reference=reference)
     row = pct.set_index("player_id").loc["est"]
@@ -85,8 +89,12 @@ def test_lower_is_better_ranges_stay_ordered():
          "dribbled_past_kind": "carried"},
     ])  # fmt: skip
     reference = pd.DataFrame(
-        {"competition_id": ITA, "group": "CB", "metric": "dribbled_past",
-         "value": np.linspace(0.1, 2.0, 30)}  # fmt: skip
+        {
+            "competition_id": ITA,
+            "group": "CB",
+            "metric": "dribbled_past",
+            "value": np.linspace(0.1, 2.0, 30),
+        }  # fmt: skip
     )
     row = percentiles(table, ITA, min_minutes=0, reference=reference).iloc[0]
     assert row["dribbled_past_lo"] < row["dribbled_past"] < row["dribbled_past_hi"]

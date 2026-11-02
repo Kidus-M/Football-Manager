@@ -96,9 +96,7 @@ def reference(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     ).dropna(subset=["value", "group"])
 
 
-def fill_from_older(
-    con: duckdb.DuckDBPyConnection, out: pd.DataFrame, before: int
-) -> pd.DataFrame:
+def fill_from_older(con: duckdb.DuckDBPyConnection, out: pd.DataFrame, before: int) -> pd.DataFrame:
     """No estimator trained: fill missing API-Football metrics with each
     player's latest older season, and say which (`defence_season`)."""
     out = out.assign(defence_season=pd.NA)
