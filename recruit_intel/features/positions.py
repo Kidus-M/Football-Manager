@@ -28,7 +28,7 @@ GROUPS: dict[str, dict] = {
         "metrics": [
             "tackles",
             "interceptions",
-            "dribbled_past",
+            "duels_won",
             "xa",
             "key_passes",
             "xg_chain",

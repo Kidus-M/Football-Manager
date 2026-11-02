@@ -67,8 +67,8 @@ instructions:
     when: {xa: "<=35", tackles: ">=60"}
     say: "{name} is a defensive full-back: keep him deeper and let the winger hold the width"
   - groups: [FB]
-    when: {dribbled_past: "<=25"}
-    say: "{name} is beaten one-on-one often: keep a midfielder close to double up"
+    when: {duels_won: "<=25"}
+    say: "{name} loses too many duels: keep a midfielder close to double up"
   - groups: [DM, CM]
     when: {interceptions: ">=75"}
     say: "{name} reads the game: let him hold the space in front of the back line"

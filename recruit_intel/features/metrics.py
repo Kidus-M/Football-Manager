@@ -42,6 +42,8 @@ METRICS: dict[str, Metric] = {
         Metric("interceptions", "Interceptions", "apifootball"),
         Metric("blocks", "Blocks", "apifootball"),
         Metric("duels_won", "Duels won", "apifootball"),
+        # API-Football leaves dribbled-past empty on every record we've loaded,
+        # so no role or rule uses it; kept for plans that do record it.
         Metric("dribbled_past", "Dribbled past", "apifootball", higher_is_better=False),
         Metric("dribbles_completed", "Dribbles completed", "apifootball"),
         Metric("fouls_committed", "Fouls committed", "apifootball", higher_is_better=False),

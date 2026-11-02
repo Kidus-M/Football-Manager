@@ -61,7 +61,7 @@ defensive_fullback:
   weights:
     tackles: 0.30
     interceptions: 0.25
-    dribbled_past: 0.25
+    duels_won: 0.25
     recoveries: 0.20
 
 ball_winner:

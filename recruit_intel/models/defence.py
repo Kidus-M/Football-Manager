@@ -42,6 +42,7 @@ LAGS = [f"lag_{m}" for m in TARGETS]
 NUMERIC = PROFILE + CONTEXT + ["age"] + LAGS + ["lag_gap"]
 CATEGORICAL = ["group", "competition_id"]
 QUANTILES = (0.1, 0.5, 0.9)
+BAND_COVERAGE = 0.8  # what the 10-90% range should cover
 MIN_TRAIN_MINUTES = 600
 MAX_LAG_GAP = 3
 MIN_GROUP_ROWS = 20  # for within-group rank correlations
@@ -111,6 +112,9 @@ class DefenceModel:
     # older seasons loaded): an all-missing column can't be binned.
     numeric: list[str] = field(default_factory=lambda: list(NUMERIC))
     models: dict = field(default_factory=dict)  # (target, quantile) -> regressor
+    # target -> {"carried"|"estimated": k}: held-out ranges were too narrow,
+    # so each is widened around the median by k until it covers BAND_COVERAGE.
+    band_scale: dict = field(default_factory=dict)
     report: dict = field(default_factory=dict)
 
     @classmethod
@@ -146,6 +150,11 @@ class DefenceModel:
                 continue
             q = np.column_stack([self.models[(target, q)].predict(x) for q in QUANTILES])
             q = np.sort(q.clip(min=0), axis=1)
+            scale = self.band_scale.get(target, {})
+            anchored = df[f"lag_{target}"].notna() if f"lag_{target}" in df else False
+            k = np.where(anchored, scale.get("carried", 1.0), scale.get("estimated", 1.0))
+            q[:, 0] = (q[:, 1] - k * (q[:, 1] - q[:, 0])).clip(min=0)
+            q[:, 2] = q[:, 1] + k * (q[:, 2] - q[:, 1])
             out[target] = pd.DataFrame(q, columns=["lo", "mid", "hi"], index=df.index)
         return out
 
@@ -265,7 +274,29 @@ def validate(rows: pd.DataFrame, folds: int = 5) -> dict:
                 "anchor as-is": _within_group_corr(scored, "_lag", t),
                 "band hit": round(float(inside.mean()), 2) if known.any() else None,
             })  # fmt: skip
-    return {"validation": table, "reliability": _reliability(table)}
+    return {"validation": table, "reliability": _reliability(table),
+            "band_scale": _band_scale(rows, preds)}  # fmt: skip
+
+
+def _band_scale(rows: pd.DataFrame, preds: dict[str, pd.DataFrame]) -> dict:
+    """Per target and kind, the factor that makes held-out ranges cover
+    BAND_COVERAGE of measured values (split-conformal calibration)."""
+    out = {}
+    for t, p in preds.items():
+        known = rows[t].notna() & p.mid.notna()
+        if not known.any():
+            continue
+        y, p = rows.loc[known, t], p[known]
+        eps = 1e-6
+        need = np.maximum((p.mid - y) / (p.mid - p.lo + eps), (y - p.mid) / (p.hi - p.mid + eps))
+        anchored = rows.loc[known, f"lag_{t}"].notna() if f"lag_{t}" in rows else False
+        scales = {}
+        for kind, mask in (("carried", anchored), ("estimated", ~anchored)):
+            if np.any(mask) and int(np.sum(mask)) >= MIN_GROUP_ROWS:
+                k = float(np.quantile(need[mask].clip(lower=0), BAND_COVERAGE))
+                scales[kind] = round(max(1.0, k), 2)
+        out[t] = scales
+    return out
 
 
 def _reliability(table: list[dict]) -> dict[str, float]:
@@ -300,9 +331,8 @@ def external_check(
     measured = table[["player_id", "group", "tackles", *(["cbi"] if "cbi" in table else [])]]
     blank = table.drop(columns=[c for c in TARGETS if c in table])
     filled = model.fill(con, blank, [season])
-    both = filled[["player_id", *TARGETS, *[f"{t}_kind" for t in TARGETS if f"{t}_kind" in
-                                            filled]]].merge(measured, on="player_id",
-                                                            suffixes=("_est", ""))  # fmt: skip
+    keep = [c for t in TARGETS for c in (t, f"{t}_kind") if c in filled]
+    both = filled[["player_id", *keep]].merge(measured, on="player_id", suffixes=("_est", ""))
     both["ib_est"] = both.interceptions + both.blocks
     out = {"season": season, "competition": competition, "players": len(both)}
     for kind in ("carried", "estimated"):

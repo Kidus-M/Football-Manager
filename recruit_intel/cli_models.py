@@ -24,6 +24,8 @@ def cmd_train(args: argparse.Namespace) -> int:
     from recruit_intel.models.dataset import player_seasons
 
     con = db.connect(args.db)
+    if args.defence_only:
+        return _train_defence(con)
     seasons = player_seasons(con)
     print(f"{len(seasons)} player-seasons with 900+ minutes, "
           f"{seasons.season.min()}-{seasons.season.max()}\n")  # fmt: skip
@@ -76,7 +78,47 @@ def cmd_train(args: argparse.Namespace) -> int:
     else:
         print("  -> style adds NO skill beyond strength: fit scores are not used in search")
 
+    _train_defence(con)
     print("\nSaved to data/models/; `recruit search` now uses the learned league factors.")
+    return 0
+
+
+def _train_defence(con) -> int:
+    from recruit_intel.models import defence
+
+    rows = defence.training_rows(con)
+    measured = rows[rows.lag_gap.isna()]
+    print("\nDefensive estimator (quantile gradient boosting, possession-adjusted per 90)")
+    if measured.player_id.nunique() < 100:
+        print(f"  only {measured.player_id.nunique()} measured players with an Understat "
+              f"profile: load API-Football first (`recruit ingest --apifootball`)")  # fmt: skip
+        return 1
+    print(f"  {len(measured)} measured player-seasons "
+          f"({', '.join(sorted(measured.competition_id.unique()))}; "
+          f"seasons {', '.join(map(str, sorted(measured.season.unique())))}), "
+          f"{rows.lag_gap.notna().sum()} with an earlier season as anchor")  # fmt: skip
+    report = defence.validate(rows)
+    table = pd.DataFrame(report["validation"])
+    print("  Held-out players: rank correlation with the measured value, within position")
+    print("  group (1 = same order; 'anchor as-is' = just reusing the older season), and")
+    print("  how often the measured value fell inside the 10-90% range (target ~0.8):")
+    with pd.option_context("display.width", 200):
+        print("  " + table.to_string(index=False, na_rep="-").replace("\n", "\n  "))
+    model = defence.DefenceModel.fit(rows)
+    model.band_scale = report["band_scale"]
+    current = con.execute(
+        "SELECT max(season) FROM player_season_stats WHERE source = 'fpl'"
+    ).fetchone()[0]
+    check = defence.external_check(con, model, current, "ENG-Premier League") if current else None
+    model.report = {**report, "external_check": check,
+                    "trained_on": {"rows": len(rows), "measured": len(measured)}}  # fmt: skip
+    model.save()
+    print(f"  ranges widened to cover 80% (factor per metric): {report['band_scale']}")
+    print(f"  reliability used to weight estimates in search: {report['reliability']}")
+    if check:
+        print(f"  Unseen season ({check['season']}, Premier League), against FPL's own counts:")
+        for kind in ("carried", "estimated"):
+            print(f"    {kind}: {check[kind]}")
     return 0
 
 
@@ -270,6 +312,11 @@ def cmd_bargains(args: argparse.Namespace) -> int:
 
 def register(sub) -> None:
     p = sub.add_parser("train", help="train embeddings and the league-translation model")
+    p.add_argument(
+        "--defence-only",
+        action="store_true",
+        help="only (re)train the defensive estimator, e.g. after loading more API-Football",
+    )
     p.set_defaults(func=cmd_train)
 
     p = sub.add_parser("similar", help="players who contribute like a given player")
