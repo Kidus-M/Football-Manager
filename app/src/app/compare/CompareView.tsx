@@ -5,9 +5,64 @@ import { useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { PlayerSearch } from "@/components/PlayerSearch";
 import { Radar, SERIES_COLOURS } from "@/components/Radar";
-import { fetcher, league, money, type Player, query } from "@/lib/api";
+import { fetcher, league, money, type Player, type Provenance, query, seasonLabel } from "@/lib/api";
 
 const MAX = 3;
+
+/** Says which of the player's numbers aren't measured in the stats window. */
+function DataNote({ p }: { p: Player }) {
+  const shown = p.percentiles.filter((m) => p.provenance[m.metric]);
+  const of = (kind: Provenance["kind"]) =>
+    shown.filter((m) => p.provenance[m.metric].kind === kind).map((m) => m.label.toLowerCase());
+  const list = (labels: string[]) => labels.join(", ").replace(/, ([^,]*)$/, " and $1");
+  const season = p.defence_season != null ? seasonLabel(p.defence_season) : "an older season";
+  const [older, carried, estimated] = [of("older"), of("carried"), of("estimated")];
+  if (!shown.length) return null;
+  return (
+    <div className="mt-2 space-y-1 text-xs text-fog">
+      {older.length > 0 && (
+        <p>
+          {list(older)} {older.length > 1 ? "are" : "is"} from {season}, the newest season the free data plan allows.
+        </p>
+      )}
+      {carried.length > 0 && (
+        <p>
+          {list(carried)} {carried.length > 1 ? "are" : "is"} estimated from his {season} numbers and this
+          season&apos;s profile.
+        </p>
+      )}
+      {estimated.length > 0 && (
+        <p className="text-club">
+          No defensive data of his own: {list(estimated)} {estimated.length > 1 ? "are" : "is"} estimated from his
+          playing style and team. Watch him before trusting them.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** A percentile cell: estimates read "~62" with their likely range, older seasons are tagged. */
+function Cell({ value, source }: { value: number | null; source: Provenance | undefined }) {
+  if (value == null) return <>n/a</>;
+  const v = Math.round(value);
+  if (!source) return <>{v}</>;
+  if (source.kind === "older") {
+    return (
+      <span title="From an older season">
+        {v}
+        <sup className="ml-0.5 text-[9px] text-fog">old</sup>
+      </span>
+    );
+  }
+  const range = source.lo != null && source.hi != null ? `${Math.round(source.lo)}–${Math.round(source.hi)}` : null;
+  return (
+    <span title={range ? `Estimated, likely ${range}` : "Estimated"}>
+      <span className="text-fog">~</span>
+      {v}
+      {range && <span className="ml-1 hidden text-[10px] text-fog sm:inline">{range}</span>}
+    </span>
+  );
+}
 
 function PlayerCard({ p, colour, onRemove }: { p: Player; colour: string; onRemove: () => void }) {
   return (
@@ -39,15 +94,11 @@ function PlayerCard({ p, colour, onRemove }: { p: Player; colour: string; onRemo
       {p.qualified === false && (
         <p className="mt-2 text-xs text-club">Small sample: percentiles are a preview, not a verdict.</p>
       )}
-      {p.defence_season != null && (
-        <p className="mt-2 text-xs text-fog">
-          Interceptions, blocks, duels and dribbled-past are from {p.defence_season}-
-          {String((p.defence_season + 1) % 100).padStart(2, "0")}, the newest season the free data plan allows.
-        </p>
-      )}
+      <DataNote p={p} />
       <p className="mt-3 text-sm">
         <span className="text-fog">Best roles </span>
-        {p.roles.map((r) => `${r.role} ${r.fit}`).join(" · ") || "–"}
+        {p.roles.map((r) => `${r.role} ${r.fit}${r.hi - r.lo >= 1 ? ` (likely ${r.lo}–${r.hi})` : ""}`).join(" · ") ||
+          "–"}
       </p>
       {p.strengths.length > 0 && (
         <p className="mt-1 text-sm">
@@ -135,9 +186,9 @@ export function CompareView() {
                 {axes.map((a, ai) => (
                   <tr key={a.metric}>
                     <td className="py-1.5">{a.label}</td>
-                    {series.map((s) => (
+                    {series.map((s, si) => (
                       <td key={s.id} className="py-1.5 text-right font-mono tabular">
-                        {s.values[ai] == null ? "n/a" : Math.round(s.values[ai] as number)}
+                        <Cell value={s.values[ai]} source={players[si].provenance?.[a.metric]} />
                       </td>
                     ))}
                   </tr>

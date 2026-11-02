@@ -64,10 +64,22 @@ export type Player = {
   contract_year: number | null;
   percentiles: { metric: string; label: string; value: number | null }[];
   all_percentiles: Record<string, number | null>;
+  /** Metrics not measured in the stats window, and where their value comes from. */
+  provenance: Record<string, Provenance>;
   strengths: string[];
   weaknesses: string[];
-  roles: { role: string; fit: number }[];
+  roles: { role: string; fit: number; lo: number; hi: number; confidence: number; own_data: boolean }[];
 };
+
+export type Provenance = {
+  /** older: an older season as-is · carried: estimated from it · estimated: no data of his own */
+  kind: "older" | "carried" | "estimated";
+  /** Likely range of an estimate, in percentiles. */
+  lo: number | null;
+  hi: number | null;
+};
+
+export const seasonLabel = (start: number) => `${start}-${String((start + 1) % 100).padStart(2, "0")}`;
 
 export class ApiError extends Error {
   constructor(

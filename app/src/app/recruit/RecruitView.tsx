@@ -19,6 +19,10 @@ type Result = {
     value_eur: number | null;
     contract_year: number | null;
     fit: number;
+    fit_lo: number;
+    fit_hi: number;
+    confidence: number;
+    own_data: boolean;
     score: number;
     vs_starter: number | null;
     why: string;
@@ -77,18 +81,30 @@ function Range({
 }
 
 /** The parts of the ranking's "why" that the row doesn't already show:
- * how the fit was adjusted, data coverage and style fit. */
+ * how the fit was adjusted, how far its data can be trusted and style fit. */
 function explain(why: string, competition: string) {
-  const parts = why.split(", ").filter((p) => /^fit |of role data|^style fit/.test(p));
+  const parts = why
+    .split(", ")
+    .filter((p) => /^fit |^range |^confidence |^defence estimated|^style fit/.test(p));
   const fit = parts[0]?.match(/^fit (\d+) in .+ -> (\d+)$/);
   if (fit) parts[0] = `${league(competition)} fit ${fit[1]}, adjusted ${fit[2]}`;
-  return parts.join(" · ");
+  return parts
+    .map((p) => (p === "defence estimated" ? "defending estimated: no data of his own" : p.replace(/^range /, "likely ")))
+    .join(" · ");
 }
 
-function FitBar({ fit, starter }: { fit: number; starter: number | null }) {
+/** Solid to the bottom of the likely range, faint across it, a tick at the fit. */
+function FitBar({ fit, lo, hi, starter }: { fit: number; lo: number; hi: number; starter: number | null }) {
+  const ranged = hi - lo >= 1;
   return (
     <div className="relative h-1.5 w-full rounded-full bg-line" aria-hidden>
-      <div className="absolute inset-y-0 left-0 rounded-full bg-chalk" style={{ width: `${fit}%` }} />
+      <div className="absolute inset-y-0 left-0 rounded-full bg-chalk" style={{ width: `${ranged ? lo : fit}%` }} />
+      {ranged && (
+        <>
+          <div className="absolute inset-y-0 rounded-full bg-chalk/30" style={{ left: `${lo}%`, width: `${hi - lo}%` }} />
+          <div className="absolute -inset-y-0.5 w-0.5 bg-chalk" style={{ left: `${fit}%` }} />
+        </>
+      )}
       {starter != null && (
         <div className="absolute -inset-y-1 w-0.5 bg-club" style={{ left: `${starter}%` }} title="Current starter" />
       )}
@@ -108,6 +124,7 @@ export function RecruitView() {
   const [contractUntil, setContractUntil] = useState<number | null>(null);
   const [leagues, setLeagues] = useState<string[]>(LEAGUES.map(([c]) => c));
   const [upgrades, setUpgrades] = useState(true);
+  const [ownData, setOwnData] = useState(false);
 
   const priorities = lineup?.priorities.map((p) => p.slot) ?? [];
   const ordered = lineup
@@ -127,6 +144,7 @@ export function RecruitView() {
     contract_until: contractUntil,
     leagues: leagues.length === LEAGUES.length ? null : leagues,
     upgrades,
+    own_data_only: ownData,
     limit: 15,
   });
   const { data, error, isLoading } = useApi<Result>(slot ? `/api/search${query(filters)}` : null, {
@@ -207,6 +225,21 @@ export function RecruitView() {
           <input type="checkbox" checked={upgrades} onChange={(e) => setUpgrades(e.target.checked)} className="accent-[var(--club)]" />
           Only players who&apos;d improve on the starter
         </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={ownData}
+            onChange={(e) => setOwnData(e.target.checked)}
+            className="mt-1 accent-[var(--club)]"
+          />
+          <span>
+            Only players with defensive data of their own
+            <span className="mt-0.5 block text-xs text-fog">
+              Defensive numbers for players with none of their own are estimated from playing style and team. They
+              still rank, but count for less.
+            </span>
+          </span>
+        </label>
       </aside>
 
       <section className="px-4 py-6 md:px-8" aria-live="polite" aria-busy={isLoading}>
@@ -259,7 +292,7 @@ export function RecruitView() {
                   </div>
                 </div>
                 <div className="col-span-3 col-start-2 md:col-span-1 md:col-start-auto">
-                  <FitBar fit={c.fit} starter={data.starter?.fit ?? null} />
+                  <FitBar fit={c.fit} lo={c.fit_lo} hi={c.fit_hi} starter={data.starter?.fit ?? null} />
                   <div className="mt-1 truncate text-[11px] text-fog" title={c.why}>
                     {explain(c.why, c.competition_id)}
                   </div>
