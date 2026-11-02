@@ -108,6 +108,15 @@ what-ifs re-run the XI). Ctrl/Cmd+K jumps to any player or view. The club's
 colours come from its config, so another club config re-skins the app. Design
 rationale and references: `docs/design/`.
 
+## Showcase (post images and videos)
+
+```bash
+.venv/Scripts/pip install -e ".[showcase]"; .venv/Scripts/python -m playwright install chromium
+.venv/Scripts/python -m showcase.export       # picks -> showcase/out/picks.json (edit PICKS to change them)
+.venv/Scripts/python -m showcase.render       # 1080x1350 carousel PNGs + reel.mp4
+.venv/Scripts/python -m showcase.walkthrough  # dashboard screen recording (API and app running)
+```
+
 ## Player identity
 
 Each source names players differently ("Bruno Borges Fernandes", "Bruno Fernandes"),
