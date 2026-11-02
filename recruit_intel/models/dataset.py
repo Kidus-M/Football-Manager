@@ -32,7 +32,7 @@ def player_seasons(con: duckdb.DuckDBPyConnection, min_minutes: int = MIN_MINUTE
     identity, group, minutes, age at the season's start, FEATURES per 90."""
     parts = []
     for season in seasons_available(con):
-        t = per90_table(con, season)
+        t = per90_table(con, season, fill=False)
         t = t[t.minutes >= min_minutes].dropna(subset=FEATURES)
         parts.append(t.assign(season=season))
     df = pd.concat(parts, ignore_index=True)

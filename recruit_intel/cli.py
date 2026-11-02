@@ -123,16 +123,24 @@ def cmd_ingest(args: argparse.Namespace) -> int:
                 )
 
     if args.apifootball is not None:
-        _ingest_apifootball(run, args.apifootball or club.recruitment.pool, current)
+        _ingest_apifootball(
+            run, args.apifootball or club.recruitment.pool, current, args.apifootball_history
+        )
 
     print(f"{run.ok}/{run.total} sources loaded into {args.db}")
     _print_match_report(con)
     return 0 if run.ok else 1
 
 
-def _ingest_apifootball(run: _Runner, countries: list[str], season: int) -> None:
+def _ingest_apifootball(
+    run: _Runner, countries: list[str], season: int, history: int = 0
+) -> None:
     """Defensive stats for every pool league. Stops at the daily quota; cached
-    pages make the next run continue where this one stopped."""
+    pages make the next run continue where this one stopped.
+
+    `history` older seasons follow the newest usable one, each loaded for every
+    league before the next: they train the defensive estimator and anchor
+    estimates for players whose latest season was thin."""
     key = apifootball.api_key()
     if not key:
         print("  ✗ apifootball: no API_FOOTBALL_KEY in the environment or .env")
@@ -146,21 +154,22 @@ def _ingest_apifootball(run: _Runner, countries: list[str], season: int) -> None
     if usable < season:
         print(f"  ⓘ apifootball: this key's plan stops at {usable}-{(usable + 1) % 100:02d}; "
               f"loading that as an older fallback for defensive stats")  # fmt: skip
-    # A finished season never changes: cache its pages for a year.
-    ttl = 7 * DAY if usable >= season else 365 * DAY
-    with apifootball.make_client(key, ttl=ttl) as client:
-        for country in countries:
-            if country not in apifootball.LEAGUES:
-                continue
-            # The runner reports any failure (QuotaExhausted included) and
-            # returns None; stop there so no more requests are spent.
-            fetched = run(
-                f"apifootball {country} {usable}",
-                lambda c=country: apifootball.ingest_league(client, c, usable),
-            )
-            if fetched is None:
-                print("  ↻ apifootball stopped; fetched pages are cached, rerun to continue")
-                return
+    for year in range(usable, usable - history - 1, -1):
+        # A finished season never changes: cache its pages for a year.
+        ttl = 7 * DAY if year >= season else 365 * DAY
+        with apifootball.make_client(key, ttl=ttl) as client:
+            for country in countries:
+                if country not in apifootball.LEAGUES:
+                    continue
+                # The runner reports any failure (QuotaExhausted included) and
+                # returns None; stop there so no more requests are spent.
+                fetched = run(
+                    f"apifootball {country} {year}",
+                    lambda c=country, y=year: apifootball.ingest_league(client, c, y),
+                )
+                if fetched is None:
+                    print("  ↻ apifootball stopped; fetched pages are cached, rerun to continue")
+                    return
 
 
 def _print_match_report(con) -> None:
@@ -525,6 +534,14 @@ def main(argv: list[str] | None = None) -> int:
         metavar="COUNTRY",
         help="also fetch API-Football defensive stats (needs API_FOOTBALL_KEY; no value: "
         "the club's recruitment pool). Free plan: ~2 days for five leagues; rerun daily",
+    )
+    p_ingest.add_argument(
+        "--apifootball-history",
+        type=int,
+        default=0,
+        metavar="N",
+        help="with --apifootball, also load the N seasons before the newest one the key "
+        "allows (training data for the defensive estimator; free plan: back to 2022)",
     )
     p_ingest.add_argument(
         "--managers",

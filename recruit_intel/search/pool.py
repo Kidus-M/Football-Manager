@@ -17,6 +17,7 @@ import yaml
 
 from recruit_intel import CONFIG_DIR, DATA_DIR
 from recruit_intel.analysis.squad import market_snapshot
+from recruit_intel.features import history
 from recruit_intel.features.per90 import per90_table
 from recruit_intel.features.percentiles import percentiles
 
@@ -70,7 +71,9 @@ def candidate_pool(
     """Percentile rows plus club, age, value_eur, contract_year per player."""
     table = per90_table(con, seasons)
     comps = competitions or sorted(table.competition_id.unique())
-    parts = [percentiles(table, comp) for comp in comps if (table.competition_id == comp).any()]
+    reference = history.reference(con)
+    parts = [percentiles(table, comp, reference=reference)
+             for comp in comps if (table.competition_id == comp).any()]  # fmt: skip
     return with_market(con, _main_league(pd.concat(parts, ignore_index=True)))
 
 

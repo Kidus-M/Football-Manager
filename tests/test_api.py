@@ -10,9 +10,10 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from recruit_intel import db  # noqa: E402
 
-pytestmark = pytest.mark.skipif(
-    not db.DEFAULT_DB.exists(), reason="no local database; run `recruit ingest`"
-)
+pytestmark = [
+    pytest.mark.skipif(not db.DEFAULT_DB.exists(), reason="no local database; run `recruit ingest`"),
+    pytest.mark.uses_trained_models,
+]
 
 
 @pytest.fixture(scope="module")

@@ -43,4 +43,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["live: hits real data sources over the network (deselect with -m 'not live')"]
+markers = [
+    "live: hits real data sources over the network (deselect with -m 'not live')",
+    "uses_trained_models: lets the test see models trained into data/models/",
+]

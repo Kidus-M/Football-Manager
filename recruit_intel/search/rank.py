@@ -4,8 +4,9 @@ The score is a weighted sum of four 0-100 components, and each candidate's
 row says what drove it, so a rank is never a black-box verdict:
 
 - fit: role fit vs league peers, discounted by league strength and by the
-  share of the role's data available, and shrunk toward 50 for small samples
-  (the dominant term)
+  confidence in the role's data (missing metrics count zero, estimated ones
+  by how well they ranked players in validation), and shrunk toward 50 for
+  small samples (the dominant term). fit_lo/fit_hi carry the estimates' range
 - age: resale and peak-years profile, best at 23-26
 - value: cheaper is better (relative to the budget when there is one)
 - contract: fewer years left means a lower fee
@@ -37,6 +38,9 @@ class Filters:
     contract_until: int | None = None  # contract ends in this year or earlier
     min_minutes: int = 900
     exclude: set[str] = field(default_factory=set)  # player_ids (own squad)
+    # Leave out players whose fit leans on a defensive estimate with no
+    # measured season of their own behind it.
+    own_data_only: bool = False
 
 
 def age_score(age) -> float:
@@ -78,21 +82,28 @@ def apply_filters(pool: pd.DataFrame, f: Filters) -> pd.DataFrame:
 
 def fit_scores(pool: pd.DataFrame, role: Role, groups: list[str],
                strength: dict[str, float]) -> pd.DataFrame:  # fmt: skip
-    """fit_raw, coverage and the league- and sample-adjusted fit per player."""
+    """fit_raw, coverage, confidence, own_data and the league- and
+    sample-adjusted fit per player, with its range (fit_lo, fit_hi)."""
+    columns = ["player_id", "fit_raw", "coverage", "confidence", "own_data", "fit",
+               "fit_lo", "fit_hi"]  # fmt: skip
     rows = []
     for _, row in pool.iterrows():
         fit = role_fit(row, role, groups=groups)
         if fit is None:
             continue
-        # Distance from average is discounted for league strength and for
-        # missing role data (non-PL players have no defensive stats), so a fit
-        # built on part of the role can't outrank one built on all of it.
+        # Distance from average is discounted for league strength and for how
+        # far the role's data can be trusted, so a fit built on part of the
+        # role, or on estimates, can't outrank one built on measured data.
         s = strength.get(row.competition_id, 0.8)
-        discounted = 50 + (fit.score - 50) * s * fit.coverage
-        adjusted = shrink(discounted, row.minutes, RELIABLE_MINUTES)
+
+        def adjust(score: float, s=s, fit=fit, row=row) -> float:
+            return shrink(50 + (score - 50) * s * fit.confidence, row.minutes, RELIABLE_MINUTES)
+
         rows.append({"player_id": row.player_id, "fit_raw": fit.score,
-                     "coverage": fit.coverage, "fit": adjusted})  # fmt: skip
-    return pd.DataFrame(rows, columns=["player_id", "fit_raw", "coverage", "fit"])
+                     "coverage": fit.coverage, "confidence": fit.confidence,
+                     "own_data": fit.own_data, "fit": adjust(fit.score),
+                     "fit_lo": adjust(fit.lo), "fit_hi": adjust(fit.hi)})  # fmt: skip
+    return pd.DataFrame(rows, columns=columns)
 
 
 def rank(
@@ -109,6 +120,8 @@ def rank(
     takes SYSTEM_WEIGHT from role fit; players without one score neutral (0)."""
     cands = apply_filters(pool, filters)
     cands = cands.merge(fit_scores(cands, role, filters.groups, strength), on="player_id")
+    if filters.own_data_only:
+        cands = cands[cands.own_data.astype(bool)]
     if cands.empty:
         return cands
     cands["age_score"] = cands.age.map(age_score)
@@ -135,8 +148,12 @@ def rank(
 def _why(r) -> str:
     league = r.competition_id.split("-", 1)[-1]
     parts = [f"fit {r.fit_raw:.0f} in {league} -> {r.fit:.0f}"]
-    if r.coverage < 1:
-        parts.append(f"{r.coverage:.0%} of role data")
+    if r.fit_hi - r.fit_lo >= 1:
+        parts.append(f"range {r.fit_lo:.0f}-{r.fit_hi:.0f}")
+    if r.confidence < 0.995:
+        parts.append(f"confidence {r.confidence:.0%}")
+    if not r.own_data:
+        parts.append("defence estimated")
     if pd.notna(r.age):
         parts.append(f"age {r.age}")
     if pd.notna(r.value_eur):

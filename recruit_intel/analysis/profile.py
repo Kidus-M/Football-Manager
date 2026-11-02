@@ -10,11 +10,13 @@ import duckdb
 import pandas as pd
 
 from recruit_intel.config import ClubConfig, Role, load_roles
+from recruit_intel.features import history
 from recruit_intel.features.metrics import METRICS
 from recruit_intel.features.per90 import per90_table
 from recruit_intel.features.percentiles import percentiles
 from recruit_intel.features.positions import GROUPS, group_of
 from recruit_intel.identity.names import normalize
+from recruit_intel.models import defence
 
 STRENGTH = 80  # percentile at or above which a metric is a strength
 WEAKNESS = 20  # at or below which it is a weakness
@@ -25,7 +27,14 @@ MIN_ROLE_COVERAGE = 0.6  # share of a role's weight that must have data
 class RoleFit:
     role: str
     score: float  # 0-100, weighted mean percentile
-    coverage: float  # share of the role's weight with data
+    coverage: float  # share of the role's weight with data (estimates included)
+    lo: float | None = None  # score with every estimate at its 10th percentile...
+    hi: float | None = None  # ...and at its 90th (equal to score when all measured)
+    # Share of the role's weight backed by data, each metric counted by how
+    # reliably its kind of value ranks players (measured = 1; see
+    # models/defence.py). Search discounts fits by it.
+    confidence: float = 1.0
+    own_data: bool = True  # False if any metric is estimated with no data of his own
 
 
 def strengths_weaknesses(row: pd.Series) -> tuple[list[str], list[str]]:
@@ -51,8 +60,30 @@ def role_fit(row: pd.Series, role: Role, groups: list[str] | None = None) -> Rol
     coverage = sum(available.values()) / sum(role.weights.values())
     if coverage < MIN_ROLE_COVERAGE:
         return None
-    score = sum(row[m] * w for m, w in available.items()) / sum(available.values())
-    return RoleFit(role.key, score, coverage)
+    total = sum(available.values())
+    score = sum(row[m] * w for m, w in available.items()) / total
+    reliable = defence.reliability()
+    kinds = {m: _kind(row, m) for m in available}
+
+    def bound(side: str) -> float:
+        return sum(_value(row, m, side) * w for m, w in available.items()) / total
+
+    confidence = sum(reliable.get(kinds[m], 0.0) * w for m, w in available.items()) / sum(
+        role.weights.values()
+    )
+    return RoleFit(role.key, score, coverage, lo=bound("lo"), hi=bound("hi"),
+                   confidence=confidence,
+                   own_data="estimated" not in kinds.values())  # fmt: skip
+
+
+def _kind(row: pd.Series, metric: str) -> str:
+    kind = row.get(f"{metric}_kind")
+    return kind if isinstance(kind, str) else "measured"
+
+
+def _value(row: pd.Series, metric: str, side: str) -> float:
+    bound = row.get(f"{metric}_{side}")
+    return float(row[metric] if bound is None or pd.isna(bound) else bound)
 
 
 def role_fits(row: pd.Series, roles: dict[str, Role]) -> list[RoleFit]:
@@ -72,7 +103,8 @@ def label(metric: str) -> str:
 
 def peer_percentiles(con: duckdb.DuckDBPyConnection, club: ClubConfig, season: int):
     """Percentiles for every player in the club's peer-group competition."""
-    return percentiles(per90_table(con, season), club.peer_group)
+    return percentiles(per90_table(con, season), club.peer_group,
+                       reference=history.reference(con))  # fmt: skip
 
 
 def find_players(pct: pd.DataFrame, query: str) -> pd.DataFrame:
